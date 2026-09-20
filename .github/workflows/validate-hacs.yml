@@ -17,3 +17,6 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
+          # The project uses PolyForm Noncommercial, which GitHub does not
+          # expose as a recognized repository license to the HACS validator.
+          ignore: license
