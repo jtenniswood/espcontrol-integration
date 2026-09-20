@@ -35,7 +35,7 @@ device and its entities are not removed.
 
 Pairing is deliberately two-stage:
 
-1. An authenticated Home Assistant session calls `POST /api/espcontrol/{id}/pair`.
+1. The device's **Visit** action opens the authenticated `GET /api/espcontrol/{id}/pair` redirect (or an authenticated Home Assistant session calls `POST /api/espcontrol/{id}/pair`).
 2. Home Assistant returns a random, ten-minute grant scoped to that device.
 3. The grant is stored only as a SHA-256 digest in the integration process.
 4. The device-hosted configurator sends the grant in
@@ -71,9 +71,12 @@ actions, and secondary entity references. An unknown field uses the generic
 all-domain rule so a future Home Assistant domain remains selectable.
 
 The web configurator keeps the current remembered-entity suggestions as a
-fallback. When a pairing grant exists in the URL fragment, it queries the
-catalogue as the user types. Manual entity IDs remain valid for offline editing
-and migration.
+fallback. The Visit redirect places the pairing grant in the device URL
+fragment, where the configurator stores it locally and queries the catalogue as
+the user types. Manual entity IDs remain valid for offline editing and
+migration. If Home Assistant has no configured internal or external URL, use
+the `create_pairing_token` service or the POST endpoint and open the returned
+pairing URI manually.
 
 ## Home Assistant quality checks to run in a HA checkout
 

@@ -22,7 +22,11 @@ until ESPHome is added.
 
 The integration also offers a short-lived pairing grant. The grant is
 deliberately scoped to one device and is never a Home Assistant long-lived
-access token.
+access token. The device **Visit** action performs this pairing automatically:
+Home Assistant issues a ten-minute grant and redirects the browser to the
+device with the grant in its URL fragment. A manual pairing service remains
+available for installations without a configured Home Assistant internal or
+external URL.
 
 If an earlier POC version created a separate empty EspControl device, remove
 that old EspControl config entry once after upgrading. The ESPHome device entry
@@ -38,7 +42,8 @@ updated.
 The HTTP contract is:
 
 ```text
-POST /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated)
+GET  /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated redirect)
+POST /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated JSON)
 GET  /api/espcontrol/{device_id}/entities  (X-EspControl-Pairing-Token)
 ```
 

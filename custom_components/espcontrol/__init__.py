@@ -24,6 +24,7 @@ from .device import (
     EspControlRuntime,
     find_esphome_device,
     mac_from_entry,
+    pairing_url,
     remove_empty_legacy_device,
     webserver_url,
 )
@@ -70,7 +71,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: EspControlConfigEntry) -
     device_id = entry.data[CONF_DEVICE_ID]
     host = entry.options.get(CONF_HOST, entry.data[CONF_HOST])
     web_port = entry.options.get(CONF_WEB_PORT, entry.data.get(CONF_WEB_PORT, 80))
-    configuration_url = webserver_url(host, web_port)
+    # The authenticated HA redirect issues a short-lived grant before sending
+    # the browser to the display. If HA URLs are not configured, retain the
+    # direct Visit link and the manual pairing service remains available.
+    configuration_url = pairing_url(hass, device_id) or webserver_url(host, web_port)
     device_registry = dr.async_get(hass)
     if (mac := mac_from_entry(entry)) and (
         esphome_device := find_esphome_device(hass, mac)
