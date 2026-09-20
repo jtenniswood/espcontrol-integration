@@ -16,7 +16,9 @@ its native entities appear on the ESPHome device entry.
 
 The integration also offers a short-lived pairing grant. The grant is
 deliberately scoped to one device and is never a Home Assistant long-lived
-access token.
+access token. The device **Visit** action opens an authenticated Home Assistant
+redirect, issues the grant, and then opens the display with the grant in its
+URL fragment.
 
 After pairing, the entity endpoint returns a bounded, searchable catalogue. It
 combines live state with entity, device, and area registry metadata and applies
@@ -27,7 +29,8 @@ updated.
 The HTTP contract is:
 
 ```text
-POST /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated)
+GET  /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated redirect)
+POST /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated JSON)
 GET  /api/espcontrol/{device_id}/entities  (Authorization: Bearer <grant>)
 ```
 
