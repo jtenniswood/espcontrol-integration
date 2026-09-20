@@ -79,24 +79,26 @@ async def async_setup_entry(hass: HomeAssistant, entry: EspControlConfigEntry) -
     if (mac := mac_from_entry(entry)) and (
         esphome_device := find_esphome_device(hass, mac)
     ):
-        # ESPHome owns the native entities. Reuse its device entry so those
-        # entities remain visible and add the EspControl web server as Visit.
+        # ESPHome owns the native entities. Keep its device entry and Visit
+        # link intact, while also creating an EspControl-owned registry entry
+        # so every discovery appears under this integration.
         device_registry.async_update_device(
             esphome_device.id,
             configuration_url=configuration_url,
         )
         remove_empty_legacy_device(hass, entry, device_id, esphome_device.id)
-    else:
-        # Keep a useful device entry when ESPHome has not been configured yet.
-        device_registry.async_get_or_create(
-            config_entry_id=entry.entry_id,
-            identifiers={(DOMAIN, device_id)},
-            configuration_url=configuration_url,
-            name=entry.title,
-            manufacturer="EspControl",
-            model=entry.data.get("model"),
-            connections={(dr.CONNECTION_NETWORK_MAC, mac)} if mac else set(),
-        )
+    # Keep a useful device entry for every discovery. When ESPHome is present,
+    # its native entities remain on the ESPHome-owned device entry because a
+    # Home Assistant device can only belong to one config entry.
+    device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, device_id)},
+        configuration_url=configuration_url,
+        name=entry.title,
+        manufacturer="EspControl",
+        model=entry.data.get("model"),
+        connections={(dr.CONNECTION_NETWORK_MAC, mac)} if mac else set(),
+    )
     runtime = EspControlRuntime(
         host=host,
         web_port=web_port,

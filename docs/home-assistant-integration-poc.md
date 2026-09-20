@@ -23,15 +23,14 @@ The additional service advertises:
 The custom integration uses the MAC address as its config-entry unique ID, so a
 DHCP address change does not create a second config entry. When an ESPHome
 device with that MAC is already registered, EspControl updates that device's
-configuration URL and leaves entity ownership with ESPHome. This is what keeps
-all of the native ESPHome entities together in Home Assistant; a second
-integration-owned device cannot safely share those entity registry entries.
-If no ESPHome device exists yet, EspControl creates a standalone device with
-the same web URL and will use it until ESPHome is configured.
+configuration URL and leaves entity ownership with ESPHome. EspControl also
+creates its own device registry entry so the display appears under the
+EspControl integration. Home Assistant keeps the native ESPHome entities on
+the ESPHome-owned device because a device can only belong to one config entry.
 
-Upgrading from the first POC may leave its old empty EspControl device in the
-device registry. That legacy config entry can be removed once; the ESPHome
-device and its entities are not removed.
+Upgrading from the first POC may leave an old empty EspControl device in the
+device registry. That legacy entry can be removed once; the ESPHome device and
+its entities are not removed.
 
 Pairing is deliberately two-stage:
 

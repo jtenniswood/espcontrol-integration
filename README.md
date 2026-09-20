@@ -14,11 +14,10 @@ experimental firmware changes live in the main [EspControl repository](https://g
 
 The integration discovers an EspControl display using the `_espcontrol._tcp`
 Zeroconf service and creates a config entry keyed by the device's stable ID.
-When the same display is already configured through ESPHome, the integration
-reuses that ESPHome device entry so its native entities stay together and adds
-the EspControl web server as the device's **Visit** link. If ESPHome has not
-been configured yet, it creates a standalone device entry with the Visit link
-until ESPHome is added.
+Every discovery gets an EspControl device entry with the device's **Visit**
+link. When the same display is also configured through ESPHome, the integration
+updates the ESPHome device's Visit link too, while native ESPHome entities stay
+owned by the ESPHome device entry.
 
 The integration also offers a short-lived pairing grant. The grant is
 deliberately scoped to one device and is never a Home Assistant long-lived
@@ -29,9 +28,9 @@ available for installations without a configured Home Assistant internal or
 external URL.
 
 If an earlier POC version created a separate empty EspControl device, remove
-that old EspControl config entry once after upgrading. The ESPHome device entry
-and its entities are retained; the updated integration adds the Visit link to
-that entry instead of creating another device.
+that old entry once after upgrading. The updated integration recreates the
+EspControl-owned device entry when the display is discovered again; the ESPHome
+device entry and its entities are retained separately.
 
 After pairing, the entity endpoint returns a bounded, searchable catalogue. It
 combines live state with entity, device, and area registry metadata and applies
