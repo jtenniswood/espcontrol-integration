@@ -16,6 +16,7 @@ from .catalog import build_entity_catalog
 from .const import (
     CONF_DEVICE_ID,
     CONF_HOST,
+    CONF_WEB_PORT,
     DEFAULT_CATALOG_LIMIT,
     DOMAIN,
     PAIRING_TOKEN_HEADER,
@@ -51,6 +52,11 @@ class EspControlPairingView(HomeAssistantView):
         )
         if not device_host:
             return None
+        device_port = entry.options.get(
+            CONF_WEB_PORT, entry.data.get(CONF_WEB_PORT, 80)
+        )
+        if ":" in device_host and not device_host.startswith("["):
+            device_host = f"[{device_host}]"
         base_url = f"{request.scheme}://{request.host}"
         pairing_payload = base64.urlsafe_b64encode(
             json.dumps(
@@ -62,7 +68,7 @@ class EspControlPairingView(HomeAssistantView):
                 separators=(",", ":"),
             ).encode()
         ).decode().rstrip("=")
-        return f"http://{device_host}/#espcontrol-pairing={pairing_payload}"
+        return f"http://{device_host}:{device_port}/#espcontrol-pairing={pairing_payload}"
 
     async def get(self, request: web.Request, device_id: str) -> web.Response:
         """Issue a grant and redirect the authenticated user to the display."""
