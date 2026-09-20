@@ -21,8 +21,17 @@ The additional service advertises:
 | `web_port` | Existing device web server port |
 
 The custom integration uses the MAC address as its config-entry unique ID, so a
-DHCP address change does not create a second device. This follows Home
-Assistant's discovery and unique-ID rules.
+DHCP address change does not create a second config entry. When an ESPHome
+device with that MAC is already registered, EspControl updates that device's
+configuration URL and leaves entity ownership with ESPHome. This is what keeps
+all of the native ESPHome entities together in Home Assistant; a second
+integration-owned device cannot safely share those entity registry entries.
+If no ESPHome device exists yet, EspControl creates a standalone device with
+the same web URL and will use it until ESPHome is configured.
+
+Upgrading from the first POC may leave its old empty EspControl device in the
+device registry. That legacy config entry can be removed once; the ESPHome
+device and its entities are not removed.
 
 Pairing is deliberately two-stage:
 

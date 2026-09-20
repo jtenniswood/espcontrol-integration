@@ -10,7 +10,6 @@ from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, Supp
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.device_registry import format_mac
 
 from .api import register_views
 from .const import (
@@ -21,7 +20,13 @@ from .const import (
     SERVICE_CREATE_PAIRING_TOKEN,
 )
 from .pairing import PairingStore
-from .device import EspControlRuntime
+from .device import (
+    EspControlRuntime,
+    find_esphome_device,
+    mac_from_entry,
+    remove_empty_legacy_device,
+    webserver_url,
+)
 
 type EspControlConfigEntry = ConfigEntry[EspControlRuntime]
 
@@ -63,18 +68,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: EspControlConfigEntry) -
     """Set up one discovered display."""
 
     device_id = entry.data[CONF_DEVICE_ID]
-    mac = format_mac(entry.data["mac"]) if entry.data.get("mac") else None
-    dr.async_get(hass).async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={(DOMAIN, device_id)},
-        name=entry.title,
-        manufacturer="EspControl",
-        model=entry.data.get("model"),
-        connections={("mac", mac)} if mac else set(),
-    )
+    host = entry.options.get(CONF_HOST, entry.data[CONF_HOST])
+    web_port = entry.options.get(CONF_WEB_PORT, entry.data.get(CONF_WEB_PORT, 80))
+    configuration_url = webserver_url(host, web_port)
+    device_registry = dr.async_get(hass)
+    if (mac := mac_from_entry(entry)) and (
+        esphome_device := find_esphome_device(hass, mac)
+    ):
+        # ESPHome owns the native entities. Reuse its device entry so those
+        # entities remain visible and add the EspControl web server as Visit.
+        device_registry.async_update_device(
+            esphome_device.id,
+            configuration_url=configuration_url,
+        )
+        remove_empty_legacy_device(hass, entry, device_id, esphome_device.id)
+    else:
+        # Keep a useful device entry when ESPHome has not been configured yet.
+        device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, device_id)},
+            configuration_url=configuration_url,
+            name=entry.title,
+            manufacturer="EspControl",
+            model=entry.data.get("model"),
+            connections={(dr.CONNECTION_NETWORK_MAC, mac)} if mac else set(),
+        )
     runtime = EspControlRuntime(
-        host=entry.options.get(CONF_HOST, entry.data[CONF_HOST]),
-        web_port=entry.options.get(CONF_WEB_PORT, entry.data.get(CONF_WEB_PORT, 80)),
+        host=host,
+        web_port=web_port,
     )
     hass.data[DOMAIN][entry.entry_id] = runtime
     await runtime.async_probe(async_get_clientsession(hass))
