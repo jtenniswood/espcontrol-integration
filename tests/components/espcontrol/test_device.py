@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from custom_components.espcontrol.device import mac_from_entry, webserver_url
+from custom_components.espcontrol.device import mac_from_entry, pairing_url, webserver_url
 
 
 def test_mac_from_entry_falls_back_to_device_id() -> None:
@@ -28,3 +28,19 @@ def test_webserver_url_handles_ipv4_and_ipv6_hosts() -> None:
 
     assert webserver_url("192.0.2.10", 80) == "http://192.0.2.10:80"
     assert webserver_url("2001:db8::10", 8080) == "http://[2001:db8::10]:8080"
+
+
+def test_pairing_url_uses_home_assistant_internal_url() -> None:
+    """Visit redirects through the authenticated Home Assistant session."""
+
+    hass = SimpleNamespace(
+        config=SimpleNamespace(
+            internal_url="http://homeassistant.local:8123/",
+            external_url="https://ha.example.com",
+        )
+    )
+
+    assert (
+        pairing_url(hass, "80:F1:B2:D0:7D:48")
+        == "http://homeassistant.local:8123/api/espcontrol/80%3AF1%3AB2%3AD0%3A7D%3A48/pair"
+    )
