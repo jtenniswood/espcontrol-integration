@@ -19,13 +19,16 @@ link. When the same display is also configured through ESPHome, the integration
 updates the ESPHome device's Visit link too, while native ESPHome entities stay
 owned by the ESPHome device entry.
 
-The integration also offers a short-lived pairing grant. The grant is
-deliberately scoped to one device and is never a Home Assistant long-lived
-access token. The device **Visit** action performs this pairing automatically:
-Home Assistant issues a ten-minute grant and redirects the browser to the
-device with the grant in its URL fragment. A manual pairing service remains
-available for installations without a configured Home Assistant internal or
-external URL.
+The native ESPHome connection is the primary catalog transport. The display
+requests the read-only `espcontrol.search_entities` response action, so a
+fresh browser needs no Home Assistant token, URL-fragment credential, or
+special pairing link. The device must be allowed to perform Home Assistant
+actions. See [the native catalog contract](docs/native-entity-catalog.md).
+
+The short-lived pairing grant remains temporarily available for older firmware.
+It is scoped to one device, expires after ten minutes, and is never a Home
+Assistant long-lived access token. It will be removed after the native
+protocol transition is complete.
 
 If an earlier POC version created a separate empty EspControl device, remove
 that old entry once after upgrading. The updated integration recreates the
@@ -47,11 +50,9 @@ GET  /api/espcontrol/{device_id}/entities  (X-EspControl-Pairing-Token)
 ```
 
 Pairing grants expire after ten minutes and are held in memory in this POC; a
-Home Assistant restart revokes them. Before a production implementation, the
-native API transport must deliver the grant to the display over an authenticated
-physical pairing flow. The browser client in `src/webserver/application/entity_catalog.ts`
-consumes the catalogue and keeps a local fallback to the existing remembered
-entity suggestions.
+Home Assistant restart revokes them. The browser client in
+`src/webserver/application/entity_catalog.ts` consumes the native display
+endpoint and keeps a local fallback to remembered entity suggestions.
 
 The intended catalogue response contains only selection metadata. Raw entity
 attributes, camera URLs, and access tokens are never forwarded.

@@ -70,6 +70,13 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
         from .catalog import build_entity_catalog
 
+        raw_capabilities = call.data.get("capabilities", ())
+        if isinstance(raw_capabilities, str):
+            capabilities = tuple(
+                value.strip() for value in raw_capabilities.split(",") if value.strip()
+            )
+        else:
+            capabilities = tuple(raw_capabilities)
         entities, next_cursor = build_entity_catalog(
             hass,
             query=call.data.get("query", ""),
@@ -78,6 +85,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             device_id=call.data.get("device_id") or None,
             include_hidden=call.data.get("include_hidden", False),
             include_disabled=call.data.get("include_disabled", False),
+            capabilities=capabilities,
             limit=call.data.get("limit", 25),
             cursor=call.data.get("cursor", 0),
         )
@@ -99,6 +107,9 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
                 vol.Optional("device_id", default=""): vol.All(str, vol.Length(max=120)),
                 vol.Optional("include_hidden", default=False): cv.boolean,
                 vol.Optional("include_disabled", default=False): cv.boolean,
+                vol.Optional("capabilities", default=[]): vol.All(
+                    cv.ensure_list, [vol.All(str, vol.Length(max=80))]
+                ),
                 vol.Optional("limit", default=25): vol.All(vol.Coerce(int), vol.Range(min=1, max=50)),
                 vol.Optional("cursor", default=0): vol.All(vol.Coerce(int), vol.Range(min=0, max=10000)),
             }

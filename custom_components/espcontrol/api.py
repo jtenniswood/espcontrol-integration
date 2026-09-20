@@ -152,6 +152,12 @@ class EspControlEntityView(HomeAssistantView):
             query=request.query.get("q", "").strip(),
             field=request.query.get("field", "entity"),
             area=request.query.get("area") or None,
+            device_id=request.query.get("device_id") or None,
+            capabilities=tuple(
+                value.strip()
+                for value in request.query.get("capabilities", "").split(",")
+                if value.strip()
+            ),
             include_hidden=request.query.get("include_hidden") == "1",
             include_disabled=request.query.get("include_disabled") == "1",
             limit=limit,

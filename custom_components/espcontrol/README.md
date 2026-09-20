@@ -20,8 +20,49 @@ The action returns a bounded, searchable catalogue. It combines live state with
 entity, device, and area registry metadata and applies the field rules in
 `const.py`. Unknown fields fall back to the all-domain rule, so a new Home
 Assistant domain remains selectable while the configurator is updated. The
-action accepts `query`, `field`, `limit`, and `cursor` values and returns
-`protocol_version`, `entities`, and `next_cursor`.
+action accepts `query`, `field`, `area`, `device_id`, `capabilities`,
+`include_hidden`, `include_disabled`, `limit`, and `cursor` values and returns
+`protocol_version`, `entities`, and `next_cursor`. The catalog is the union of
+the entity registry and live states, so disabled registry entries and
+unregistered live states are handled explicitly rather than silently dropped.
+
+The native contract is versioned and intentionally small:
+
+```json
+{
+  "query": "kitchen",
+  "field": "light",
+  "limit": 50,
+  "cursor": 0,
+  "include_hidden": false,
+  "include_disabled": false
+}
+```
+
+```json
+{
+  "protocol_version": 1,
+  "entities": [{
+    "entity_id": "light.kitchen",
+    "domain": "light",
+    "name": "Kitchen Lights",
+    "area_name": "Kitchen",
+    "device_name": "Kitchen Lamp",
+    "available": true,
+    "disabled": false,
+    "hidden": false,
+    "capabilities": ["brightness"]
+  }],
+  "next_cursor": null
+}
+```
+
+Results are sorted by friendly name and entity ID. `cursor` is an offset into
+that stable ordering; if the HA registry changes between pages, the next page
+reflects the new catalog and the client may retry from the beginning. Limits
+are bounded to 50 results per action response. A missing connection, invalid
+request, timeout, or oversized response is returned as an explicit error so a
+picker cannot present an empty list as a successful search.
 
 The legacy HTTP contract remains temporarily available for older firmware:
 
