@@ -30,7 +30,7 @@ Pairing is deliberately two-stage:
 2. Home Assistant returns a random, ten-minute grant scoped to that device.
 3. The grant is stored only as a SHA-256 digest in the integration process.
 4. The device-hosted configurator sends the grant in
-   `X-EspControl-Pairing-Token` when requesting catalogue pages.
+   `Authorization: Bearer <grant>` when requesting catalogue pages.
 
 The grant is not a Home Assistant long-lived token. It cannot call arbitrary
 Home Assistant APIs, is rejected for another device, and is revoked when it

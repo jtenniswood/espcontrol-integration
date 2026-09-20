@@ -77,6 +77,9 @@ class EspControlEntityView(HomeAssistantView):
     url = "/api/espcontrol/{device_id}/entities"
     name = "api:espcontrol:entities"
     requires_auth = False
+    # Use Home Assistant's built-in CORS preflight handling. Defining an
+    # explicit OPTIONS method conflicts with the handler registered by HA.
+    cors_allowed = True
 
     def __init__(self, hass: HomeAssistant, pairing: PairingStore) -> None:
         self._hass = hass
@@ -96,26 +99,15 @@ class EspControlEntityView(HomeAssistantView):
                 return origin
         return None
 
-    async def options(self, request: web.Request, device_id: str) -> web.Response:
-        """Allow the device-hosted configurator to make token-authenticated GETs."""
-
-        origin = self._allowed_origin(device_id, request.headers.get("Origin"))
-        if origin is None:
-            return web.Response(status=HTTPStatus.FORBIDDEN)
-        return web.Response(
-            status=HTTPStatus.NO_CONTENT,
-            headers={
-                "Access-Control-Allow-Origin": origin,
-                "Access-Control-Allow-Headers": PAIRING_TOKEN_HEADER,
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Vary": "Origin",
-            },
-        )
-
     async def get(self, request: web.Request, device_id: str) -> web.Response:
         """Return one catalogue page after validating the temporary grant."""
 
-        token = request.headers.get(PAIRING_TOKEN_HEADER, "")
+        authorization = request.headers.get(PAIRING_TOKEN_HEADER, "")
+        token = authorization.removeprefix("Bearer ").strip()
+        if not token:
+            # Keep already-flashed POC firmware usable while it is updated to
+            # the standard Authorization header used for CORS requests.
+            token = request.headers.get("X-EspControl-Pairing-Token", "")
         if not self._pairing.validate(device_id, token):
             return web.json_response({"error": "invalid_pairing"}, status=HTTPStatus.UNAUTHORIZED)
         origin = self._allowed_origin(device_id, request.headers.get("Origin"))

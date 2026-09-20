@@ -18,7 +18,7 @@ The HTTP contract is:
 
 ```text
 POST /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated)
-GET  /api/espcontrol/{device_id}/entities  (X-EspControl-Pairing-Token)
+GET  /api/espcontrol/{device_id}/entities  (Authorization: Bearer <grant>)
 ```
 
 Pairing grants expire after ten minutes and are held in memory in this POC; a
