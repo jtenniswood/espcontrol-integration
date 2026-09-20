@@ -8,3 +8,28 @@ create_pairing_token:
       required: true
       selector:
         text:
+search_entities:
+  name: Search entities
+  description: Return matching Home Assistant entities to an approved EspControl display.
+  fields:
+    query:
+      name: Search text
+      description: Match entity IDs, names, areas or devices.
+      selector:
+        text:
+    field:
+      name: Picker field
+      description: EspControl field compatibility rule.
+      selector:
+        text:
+    limit:
+      name: Page size
+      selector:
+        number:
+          min: 1
+          max: 50
+    cursor:
+      name: Cursor
+      selector:
+        number:
+          min: 0

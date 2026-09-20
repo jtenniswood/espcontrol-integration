@@ -21,6 +21,8 @@ MAX_CATALOG_LIMIT = 100
 DEFAULT_CATALOG_LIMIT = 50
 
 SERVICE_CREATE_PAIRING_TOKEN = "create_pairing_token"
+SERVICE_SEARCH_ENTITIES = "search_entities"
+CATALOG_PROTOCOL_VERSION = 1
 
 
 @dataclass(frozen=True, slots=True)

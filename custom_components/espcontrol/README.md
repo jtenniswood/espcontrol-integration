@@ -10,19 +10,20 @@ ESPHome already owns the same MAC address, setup updates that ESPHome device's
 configuration URL as well, while native ESPHome entities remain on the ESPHome
 device entry.
 
-The integration also offers a short-lived pairing grant. The grant is
-deliberately scoped to one device and is never a Home Assistant long-lived
-access token. The device **Visit** action opens an authenticated Home Assistant
-redirect, issues the grant, and then opens the display with the grant in its
-URL fragment.
+The display now uses the existing authenticated ESPHome connection to request
+catalogue pages. Home Assistant exposes the read-only `espcontrol.search_entities`
+action, and the firmware forwards browser searches over that connection. The
+browser therefore needs no Home Assistant token or pairing URL. The HA ESPHome
+device configuration must allow the device to perform Home Assistant actions.
 
-After pairing, the entity endpoint returns a bounded, searchable catalogue. It
-combines live state with entity, device, and area registry metadata and applies
-the field rules in `const.py`. Unknown fields fall back to the all-domain rule,
-so a new Home Assistant domain remains selectable while the configurator is
-updated.
+The action returns a bounded, searchable catalogue. It combines live state with
+entity, device, and area registry metadata and applies the field rules in
+`const.py`. Unknown fields fall back to the all-domain rule, so a new Home
+Assistant domain remains selectable while the configurator is updated. The
+action accepts `query`, `field`, `limit`, and `cursor` values and returns
+`protocol_version`, `entities`, and `next_cursor`.
 
-The HTTP contract is:
+The legacy HTTP contract remains temporarily available for older firmware:
 
 ```text
 GET  /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated redirect)
@@ -30,12 +31,9 @@ POST /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated JSON)
 GET  /api/espcontrol/{device_id}/entities  (Authorization: Bearer <grant>)
 ```
 
-Pairing grants expire after ten minutes and are held in memory in this POC; a
-Home Assistant restart revokes them. Before a production implementation, the
-native API transport must deliver the grant to the display over an authenticated
-physical pairing flow. The browser client in `src/webserver/application/entity_catalog.ts`
-consumes the catalogue and keeps a local fallback to the existing remembered
-entity suggestions.
+The browser client in `src/webserver/application/entity_catalog.ts` consumes
+the local firmware endpoint and displays remembered local IDs only as a fallback
+when the native catalogue is unavailable.
 
 The intended catalogue response contains only selection metadata. Raw entity
 attributes, camera URLs, and access tokens are never forwarded.
