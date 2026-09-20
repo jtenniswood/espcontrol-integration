@@ -5,14 +5,10 @@ Assistant Core contribution.
 
 The integration discovers an EspControl display using the `_espcontrol._tcp`
 Zeroconf service and creates a config entry keyed by the device's stable ID.
-When ESPHome already owns the same MAC address, setup updates that ESPHome
-device's configuration URL instead of creating a duplicate empty device. This
-keeps all native ESPHome entities on the device that owns them while exposing
-the EspControl web server through **Visit**.
-
-If ESPHome has not been configured yet, the integration creates a standalone
-device entry with a Visit link. Adding the ESPHome integration later will make
-its native entities appear on the ESPHome device entry.
+Every discovery gets an EspControl device entry with a **Visit** link. When
+ESPHome already owns the same MAC address, setup updates that ESPHome device's
+configuration URL as well, while native ESPHome entities remain on the ESPHome
+device entry.
 
 The integration also offers a short-lived pairing grant. The grant is
 deliberately scoped to one device and is never a Home Assistant long-lived
