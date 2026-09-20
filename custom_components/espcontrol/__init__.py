@@ -1,4 +1,4 @@
-"""EspControl Home Assistant integration proof of concept."""
+"""EspControl integration proof of concept."""
 
 from __future__ import annotations
 

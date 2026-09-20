@@ -1,4 +1,4 @@
-# EspControl Home Assistant integration proof of concept
+# EspControl Integration proof of concept
 
 This directory is a local custom integration prototype. It is not a Home
 Assistant Core contribution.

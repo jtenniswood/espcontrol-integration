@@ -1,8 +1,7 @@
-# EspControl Home Assistant integration
+# EspControl Integration
 
-This repository contains the experimental EspControl Home Assistant
-integration. It is a HACS-installable custom integration and is not a Home
-Assistant Core contribution.
+This repository contains the experimental EspControl integration. It is a HACS-installable
+custom integration and is not a Home Assistant Core contribution.
 
 ## Install with HACS
 
