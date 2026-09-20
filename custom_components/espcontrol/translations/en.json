@@ -9,6 +9,10 @@
           "description": "The stable device identifier shown during discovery."
         }
       }
+    },
+    "search_entities": {
+      "name": "Search entities",
+      "description": "Return matching Home Assistant entities to an approved EspControl display."
     }
   },
   "config": {
