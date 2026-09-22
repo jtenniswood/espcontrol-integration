@@ -13,9 +13,31 @@ The device firmware must also advertise the `_espcontrol._tcp` service. The
 experimental firmware changes live in the main [EspControl repository](https://github.com/jtenniswood/espcontrol).
 
 The integration discovers an EspControl display using the `_espcontrol._tcp`
-Zeroconf service, creates a config entry keyed by the device's stable ID, and
-offers a short-lived pairing grant. The grant is deliberately scoped to one
-device and is never a Home Assistant long-lived access token.
+Zeroconf service and creates a config entry keyed by the device's stable ID.
+Its Visit link points directly to the display's local HTTP server. When the
+same hardware is also configured through ESPHome, EspControl mirrors the
+ESPHome sensor and binary-sensor states onto its own device entry.
+
+Mirrors are read-only copies of enabled native ESPHome sensors for the same
+panel MAC address, including text sensors exposed by ESPHome as Home Assistant
+sensors. They follow state changes, source renames, and sensors added after
+startup. Missing, disabled, or unavailable sources make their copies unavailable.
+The native ESPHome integration must remain configured; its entities and actions
+continue to work independently. Removing EspControl leaves them in place.
+
+After installing or updating the integration, restart Home Assistant. The copies
+appear under the matching EspControl device automatically. Disabled native
+sensors must first be enabled in ESPHome's Home Assistant device page.
+
+## Development tests
+
+Use Python 3.14 and install `requirements-test.txt` in a virtual environment, then
+run `python -m pytest tests/components/espcontrol`. Tests use Home Assistant's
+registries and entity platforms with device HTTP access mocked out.
+
+The integration also offers a short-lived pairing grant. The grant is
+deliberately scoped to one device and is never a Home Assistant long-lived
+access token.
 
 After pairing, the entity endpoint returns a bounded, searchable catalogue. It
 combines live state with entity, device, and area registry metadata and applies

@@ -8,7 +8,7 @@
   "integration_type": "device",
   "issue_tracker": "https://github.com/jtenniswood/espcontrol/issues",
   "iot_class": "local_push",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "zeroconf": [
     {
       "type": "_espcontrol._tcp.local.",

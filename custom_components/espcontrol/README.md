@@ -4,9 +4,15 @@ This directory is a local custom integration prototype. It is not a Home
 Assistant Core contribution.
 
 The integration discovers an EspControl display using the `_espcontrol._tcp`
-Zeroconf service, creates a config entry keyed by the device's stable ID, and
-offers a short-lived pairing grant. The grant is deliberately scoped to one
-device and is never a Home Assistant long-lived access token.
+Zeroconf service and creates a config entry keyed by the device's stable ID.
+Its **Visit** link points directly to the display's local HTTP server. When
+ESPHome owns the same MAC address, the integration mirrors its sensor and
+binary-sensor states onto the EspControl device while leaving native ESPHome
+entities unchanged.
+
+The integration also offers a short-lived pairing grant. The grant is
+deliberately scoped to one device and is never a Home Assistant long-lived
+access token.
 
 After pairing, the entity endpoint returns a bounded, searchable catalogue. It
 combines live state with entity, device, and area registry metadata and applies

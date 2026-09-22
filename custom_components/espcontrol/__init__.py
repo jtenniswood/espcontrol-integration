@@ -6,11 +6,19 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import (
+    Event,
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .api import register_views
 from .const import (
@@ -18,12 +26,19 @@ from .const import (
     CONF_HOST,
     CONF_WEB_PORT,
     DOMAIN,
+    SIGNAL_ESPHOME_ENTITIES_UPDATED,
     SERVICE_CREATE_PAIRING_TOKEN,
 )
 from .pairing import PairingStore
-from .device import EspControlRuntime
+from .device import (
+    EspControlRuntime,
+    mac_from_entry,
+    webserver_url,
+)
 
 type EspControlConfigEntry = ConfigEntry[EspControlRuntime]
+
+PLATFORMS = ("sensor", "binary_sensor")
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
@@ -32,6 +47,14 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     pairing = PairingStore()
     hass.data[DOMAIN] = {"pairing": pairing}
     register_views(hass, pairing)
+
+    @callback
+    def _async_home_assistant_started(_event: Event) -> None:
+        # ESPHome may finish loading after this config entry. A final startup
+        # scan ensures the mirrors see entities regardless of setup order.
+        async_dispatcher_send(hass, SIGNAL_ESPHOME_ENTITIES_UPDATED)
+
+    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _async_home_assistant_started)
 
     async def create_pairing_token(call: ServiceCall) -> ServiceResponse:
         device_id = call.data[CONF_DEVICE_ID]
@@ -63,26 +86,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: EspControlConfigEntry) -
     """Set up one discovered display."""
 
     device_id = entry.data[CONF_DEVICE_ID]
-    mac = format_mac(entry.data["mac"]) if entry.data.get("mac") else None
-    dr.async_get(hass).async_get_or_create(
+    host = entry.options.get(CONF_HOST, entry.data[CONF_HOST])
+    web_port = entry.options.get(CONF_WEB_PORT, entry.data.get(CONF_WEB_PORT, 80))
+    configuration_url = webserver_url(host, web_port)
+    device_registry = dr.async_get(hass)
+    mac = mac_from_entry(entry)
+    # Keep an EspControl-owned device so its mirrored entities have a stable
+    # home. ESPHome owns the originals; Home Assistant displays the two devices
+    # as linked when they share the panel MAC.
+    device_registry.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, device_id)},
+        configuration_url=configuration_url,
         name=entry.title,
         manufacturer="EspControl",
         model=entry.data.get("model"),
-        connections={("mac", mac)} if mac else set(),
+        connections={(dr.CONNECTION_NETWORK_MAC, mac)} if mac else set(),
     )
     runtime = EspControlRuntime(
-        host=entry.options.get(CONF_HOST, entry.data[CONF_HOST]),
-        web_port=entry.options.get(CONF_WEB_PORT, entry.data.get(CONF_WEB_PORT, 80)),
+        host=host,
+        web_port=web_port,
     )
     hass.data[DOMAIN][entry.entry_id] = runtime
     await runtime.async_probe(async_get_clientsession(hass))
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # The ESPHome entry is normally loaded first, but discovery order is not a
+    # contract. This lets the mirror platforms rescan after both entries load.
+    async_dispatcher_send(hass, SIGNAL_ESPHOME_ENTITIES_UPDATED)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: EspControlConfigEntry) -> bool:
     """Unload one display runtime."""
 
-    hass.data[DOMAIN].pop(entry.entry_id, None)
-    return True
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+    return unload_ok
