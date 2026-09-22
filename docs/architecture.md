@@ -1,7 +1,7 @@
 # Architecture and maintenance
 
 ESPHome owns native device communication, actions, and source entities. EspControl
-owns its config entry, device record, catalog, and read-only sensor copies.
+owns its config entry, device record, catalog, sensor copies, and control proxies.
 
 | Owner | Files | Boundary |
 |---|---|---|
@@ -11,8 +11,9 @@ owns its config entry, device record, catalog, and read-only sensor copies.
 | Native adapter | `services.py` | HA service schema and ESPHome string/list normalization |
 | Legacy adapter | `legacy.py`, `api.py`, `pairing.py` | Pairing, HTTP, origins, expiration, revocation |
 | Display lifetime | `runtime.py`, `device.py`, `config_flow.py` | Effective address, timer, identity and source tracker, stored in `ConfigEntry.runtime_data` |
-| Native source tracker | `tracker.py` | One device/entity listener pair per display, shared by both platforms |
-| Entity presentation | `mirror.py`, `sensor.py`, `binary_sensor.py` | State subscriptions and value/metadata conversion |
+| Native source tracker | `tracker.py` | One device/entity listener pair per display, shared by all mirror platforms |
+| Entity presentation | `mirror.py`, `sensor.py`, `binary_sensor.py` | State subscriptions, short names, value/metadata conversion and sensor display precision |
+| Control forwarding | `control.py`, `light.py`, `button.py`, `switch.py`, `select.py`, `number.py`, `text.py` | Typed HA controls preserve native capabilities and forward actions to the exact source with the caller's context |
 | Saved compatibility | `migrations.py` | Additive entry migration and deferred, idempotent legacy mirror migration |
 
 The tracker filters registry events by the associated ESPHome device and remembered
@@ -20,6 +21,13 @@ source entity IDs. Disabled and removed sources update existing mirrors; mirror
 registry events and unrelated devices do not trigger scans. Late ESPHome startup
 is handled through registry events and one final HA startup reconciliation.
 Source state subscriptions remain on entities so state updates do not scan registries.
+
+Controls use the same tracker and stable identities as sensors. Their actions call
+the source domain's Home Assistant service with the current source entity ID;
+no second ESPHome connection is created. Source availability and registry identity
+are checked before forwarding, and native errors propagate to the caller.
+The registry's short entity name drives device-page labels. Sensor display precision
+is presentation metadata, so rounding does not discard recorded measurements.
 
 Each mirror records `source_entity_id` as a HA attribute. Wire v1 stays unchanged:
 its selection metadata does not expose extra state attributes or remove duplicate

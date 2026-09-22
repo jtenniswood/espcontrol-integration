@@ -6,7 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from .const import CONF_DEVICE_ID, CONF_HOST, CONF_WEB_PORT, DOMAIN
+from .const import CONF_DEVICE_ID, CONF_HOST, CONF_WEB_PORT, DOMAIN, MIRROR_PLATFORMS
 from .device import mac_from_entry, webserver_url
 from .legacy import LegacyCatalogAdapter
 from .migrations import async_migrate_entry  # noqa: F401 -- HA lifecycle entry point
@@ -15,7 +15,7 @@ from .services import async_register_catalog_action
 
 type EspControlConfigEntry = ConfigEntry[EspControlRuntime]
 
-PLATFORMS = ("sensor", "binary_sensor")
+PLATFORMS = MIRROR_PLATFORMS
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:

@@ -8,6 +8,7 @@ from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
+from .const import MIRROR_PLATFORMS
 from .device import ESPHOME_DOMAIN, find_esphome_device, mac_from_entry, webserver_url
 
 
@@ -118,7 +119,7 @@ class NativeSourceTracker:
                 )
                 if source.platform == ESPHOME_DOMAIN
                 and source.config_entry_id == device.config_entry_id
-                and source.domain in {"sensor", "binary_sensor"}
+                and source.domain in MIRROR_PLATFORMS
             ]
             if device
             else []

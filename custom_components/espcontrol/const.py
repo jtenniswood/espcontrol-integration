@@ -7,6 +7,16 @@ from dataclasses import dataclass
 from .catalog_contract import FIELD_DOMAINS, TRANSPORTS
 
 DOMAIN = "espcontrol"
+MIRROR_PLATFORMS = (
+    "sensor",
+    "binary_sensor",
+    "light",
+    "button",
+    "switch",
+    "select",
+    "number",
+    "text",
+)
 CONF_DEVICE_ID = "device_id"
 CONF_HOST = "host"
 CONF_PORT = "port"

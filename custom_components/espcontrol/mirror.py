@@ -1,12 +1,19 @@
-"""Read-only mirrors of sensors owned by the panel's native ESPHome entry."""
+"""Mirrors of entities owned by the panel's native ESPHome entry."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_FRIENDLY_NAME, ATTR_ICON, STATE_UNAVAILABLE
+from homeassistant.const import (
+    ATTR_FRIENDLY_NAME,
+    ATTR_ICON,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
 from homeassistant.core import Event, HomeAssistant, State, callback
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import DeviceInfo, Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -23,10 +30,10 @@ def mirror_unique_id(entry: ConfigEntry, source: er.RegistryEntry) -> str:
 
 
 class EspControlMirror(Entity):
-    """Share source tracking, metadata and availability across sensor types."""
+    """Share source tracking, metadata and availability across entity types."""
 
     _attr_should_poll = False
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
 
     def __init__(self, entry: ConfigEntry, source: er.RegistryEntry) -> None:
         self._source: er.RegistryEntry | None = source
@@ -57,19 +64,44 @@ class EspControlMirror(Entity):
             return None
         return self.hass.states.get(self._source.entity_id)
 
+    def source_attribute(self, name: str, default: Any = None) -> Any:
+        """Read current native metadata, including capabilities learned later."""
+        state = self._state()
+        return state.attributes.get(name, default) if state else default
+
+    @property
+    def source_value(self) -> str | None:
+        state = self._state()
+        if state is None or state.state in {STATE_UNKNOWN, STATE_UNAVAILABLE}:
+            return None
+        return state.state
+
     @property
     def available(self) -> bool:
         state = self._state()
         return state is not None and state.state != STATE_UNAVAILABLE
 
     @property
-    def name(self) -> str:
-        state = self._state()
-        return (
-            state.attributes.get(ATTR_FRIENDLY_NAME, self._source_name)
-            if state
-            else self._source_name
-        )
+    def name(self) -> str | None:
+        if (source := self._source) is None:
+            return self._source_name
+        # ESPHome already stores the short entity name in the registry. Its
+        # state friendly_name includes the device prefix and must not be reused.
+        name = source.name or source.original_name
+        if not source.has_entity_name:
+            name = name or self.source_attribute(ATTR_FRIENDLY_NAME, source.entity_id)
+            device = (
+                dr.async_get(self.hass).async_get(source.device_id)
+                if source.device_id
+                else None
+            )
+            if device:
+                for prefix in (device.name_by_user, device.name):
+                    if prefix and name.startswith(f"{prefix} "):
+                        name = name[len(prefix) + 1 :]
+                        break
+        self._source_name = name
+        return name
 
     @property
     def icon(self) -> str | None:
@@ -126,7 +158,7 @@ def async_setup_mirrors(
     factory: Callable[[ConfigEntry, er.RegistryEntry], EspControlMirror],
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Discover sensors even if ESPHome is added or reloaded after startup."""
+    """Discover entities even if ESPHome is added or reloaded after startup."""
 
     registry = er.async_get(hass)
     mirrors: dict[str, EspControlMirror] = {}

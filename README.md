@@ -3,7 +3,7 @@
 A HACS custom integration that connects EspControl displays to Home Assistant.
 It discovers displays, opens their configurator through **Visit**, supplies safe
 entity-selection metadata over the existing ESPHome connection, and mirrors the
-display's native ESPHome sensors. This is an experimental companion integration,
+display's native ESPHome sensors and controls. This is an experimental companion integration,
 not a Home Assistant Core integration or a replacement for ESPHome.
 
 ## Install and connect
@@ -25,14 +25,22 @@ The configurator can retain remembered suggestions and manual entity-ID entry
 when catalog access fails. It must report a transport error separately from an
 empty successful search. Firmware owns this browser behavior.
 
-## Devices and sensors
+## Devices, sensors and controls
 
 EspControl and ESPHome retain separate device records for the same physical
 panel. EspControl creates read-only copies of enabled native sensor and binary
 sensor entities matching the panel's MAC, including text sensors represented by
-Home Assistant's sensor domain. Native actions and entities remain owned by ESPHome.
+Home Assistant's sensor domain. It also mirrors lights (including display backlight),
+buttons, switches, selectors, numbers, and text settings. Control actions target
+the matching native entity through Home Assistant; ESPHome keeps ownership of
+device communication. Configuration categories, options, and limits are preserved.
 
-Copies follow source state, metadata, renames, and sensors added after startup.
+Device pages show short entity labels without repeating the panel name.
+Percentage (`%`) and byte (`B`) sensors display whole numbers while retaining
+the original measurements for history. Explicit display-precision overrides
+and custom names on the EspControl entities are preserved.
+
+Copies follow source state, metadata, renames, and entities added after startup.
 Missing, disabled, or unavailable sources make copies unavailable. Each copy
 exposes `source_entity_id` so its origin is inspectable. Both source and copy
 remain selectable in catalog v1; existing selections are never rewritten.
@@ -42,7 +50,7 @@ Discovered address and web-port changes reload the display runtime. Options
 provide a manual address override; that override takes precedence over discovery.
 Both device Visit links update. The integration checks web reachability every
 60 seconds and reports it separately from the native source association and
-available sensor count. An offline display does not prevent setup.
+available source count. An offline display does not prevent setup.
 
 ## Upgrade and removal
 
