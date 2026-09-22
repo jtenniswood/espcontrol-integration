@@ -1,4 +1,4 @@
-"""Config flow for discovering and pairing EspControl displays."""
+"""Discover displays and maintain their network addresses."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
 
 from .const import (
@@ -22,6 +22,8 @@ from .const import (
     DOMAIN,
     PROTOCOL_VERSION,
 )
+from .device import normalize_device_id, parse_mac
+from .migrations import CONFIG_MINOR_VERSION, CONFIG_VERSION
 
 
 def _text(value: Any) -> str:
@@ -33,10 +35,24 @@ def _text(value: Any) -> str:
 class EspControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle user and Zeroconf setup."""
 
-    VERSION = 1
+    VERSION = CONFIG_VERSION
+    MINOR_VERSION = CONFIG_MINOR_VERSION
 
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
+
+    @callback
+    def _entry_for_identity(self, device_id: str) -> config_entries.ConfigEntry | None:
+        """Include disabled legacy entries whose migration has not run yet."""
+        return next(
+            (
+                entry
+                for entry in self._async_current_entries()
+                if normalize_device_id(entry.unique_id or entry.data[CONF_DEVICE_ID])
+                == device_id
+            ),
+            None,
+        )
 
     @staticmethod
     @callback
@@ -45,31 +61,43 @@ class EspControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.OptionsFlow:
         return EspControlOptionsFlow()
 
-    async def async_step_zeroconf(self, discovery_info: ZeroconfServiceInfo) -> FlowResult:
-        properties = {_text(key): _text(value) for key, value in discovery_info.properties.items()}
+    async def async_step_zeroconf(
+        self, discovery_info: ZeroconfServiceInfo
+    ) -> FlowResult:
+        properties = {
+            _text(key): _text(value) for key, value in discovery_info.properties.items()
+        }
         if properties.get(CONF_PROTOCOL, "") != str(PROTOCOL_VERSION):
             return self.async_abort(reason="unsupported_protocol")
         mac = properties.get(CONF_MAC)
         if mac:
-            try:
-                mac = format_mac(mac)
-            except ValueError:
+            mac = parse_mac(mac)
+            if mac is None:
                 return self.async_abort(reason="invalid_device")
         device_id = mac or properties.get(CONF_DEVICE_ID)
         if not device_id:
             return self.async_abort(reason="missing_device_id")
-        if not mac:
-            try:
-                device_id = format_mac(device_id)
-            except ValueError:
-                # Future firmware may use a non-MAC stable identifier.
-                pass
+        device_id = normalize_device_id(device_id)
+        if not device_id:
+            return self.async_abort(reason="missing_device_id")
         try:
-            web_port = int(properties.get(CONF_WEB_PORT, "80"))
-        except ValueError:
+            web_port = cv.port(properties.get(CONF_WEB_PORT, "80"))
+        except (ValueError, vol.Invalid):
             return self.async_abort(reason="invalid_device")
         await self.async_set_unique_id(device_id)
-        self._abort_if_unique_id_configured(updates={CONF_HOST: discovery_info.host})
+        if existing := self._entry_for_identity(device_id):
+            self.hass.config_entries.async_update_entry(
+                existing,
+                data={
+                    **existing.data,
+                    CONF_HOST: discovery_info.host,
+                    CONF_WEB_PORT: web_port,
+                },
+            )
+            return self.async_abort(reason="already_configured")
+        self._abort_if_unique_id_configured(
+            updates={CONF_HOST: discovery_info.host, CONF_WEB_PORT: web_port}
+        )
         self._data = {
             CONF_DEVICE_ID: device_id,
             CONF_HOST: discovery_info.host,
@@ -86,16 +114,26 @@ class EspControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         }
         return await self.async_step_confirm()
 
-    async def async_step_confirm(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         if user_input is not None:
             return self.async_create_entry(
                 title=self.context["title_placeholders"]["name"], data=self._data
             )
         return self.async_show_form(step_id="confirm")
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         if user_input is not None:
+            user_input = {
+                **user_input,
+                CONF_DEVICE_ID: normalize_device_id(user_input[CONF_DEVICE_ID]),
+            }
             await self.async_set_unique_id(user_input[CONF_DEVICE_ID])
+            if self._entry_for_identity(user_input[CONF_DEVICE_ID]):
+                return self.async_abort(reason="already_configured")
             self._abort_if_unique_id_configured()
             return self.async_create_entry(
                 title=user_input[CONF_DEVICE_ID],
@@ -105,9 +143,11 @@ class EspControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_DEVICE_ID): str,
-                    vol.Required(CONF_HOST): str,
-                    vol.Optional(CONF_PORT, default=DEFAULT_PORT): vol.Coerce(int),
+                    vol.Required(CONF_DEVICE_ID): vol.All(
+                        str, vol.Strip, vol.Length(min=1)
+                    ),
+                    vol.Required(CONF_HOST): vol.All(str, vol.Strip, vol.Length(min=1)),
+                    vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
                 }
             ),
         )
@@ -116,16 +156,23 @@ class EspControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class EspControlOptionsFlow(config_entries.OptionsFlow):
     """Allow a user to change the display address after DHCP changes."""
 
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_HOST): str,
-                    vol.Optional(CONF_PORT, default=DEFAULT_PORT): vol.Coerce(int),
-                    vol.Optional(CONF_WEB_PORT, default=80): vol.Coerce(int),
-                }
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema(
+                    {
+                        vol.Required(CONF_HOST): vol.All(
+                            str, vol.Strip, vol.Length(min=1)
+                        ),
+                        vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
+                        vol.Optional(CONF_WEB_PORT, default=80): cv.port,
+                    }
+                ),
+                {**self.config_entry.data, **self.config_entry.options},
             ),
         )

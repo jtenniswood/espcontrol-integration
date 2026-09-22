@@ -1,6 +1,7 @@
 """Exercise mirrored sensors through real HA platforms and registries."""
 
 import pytest
+from homeassistant.components.sensor import async_rounded_state
 from homeassistant.const import EntityCategory
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -56,7 +57,13 @@ def copy_id(hass, panel, source):
 
 async def test_mirrors_values_metadata_and_device_ownership(hass, panel):
     native = add_native(hass)
-    source = add_source(hass, native, entity_category=EntityCategory.DIAGNOSTIC)
+    source = add_source(
+        hass,
+        native,
+        name="Temperature",
+        has_entity_name=True,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    )
     attributes = {
         "friendly_name": "Kitchen Temperature",
         "unit_of_measurement": "°C",
@@ -143,6 +150,81 @@ async def test_late_discovery_rename_disable_remove_and_reenable(hass, panel, do
     await hass.async_block_till_done()
     assert hass.states.get(mirror_id).state == "unavailable"
     assert len(er.async_entries_for_config_entry(registry, panel.entry_id)) == 1
+
+
+@pytest.mark.parametrize("modern", [True, False])
+async def test_device_page_names_and_existing_mirror_identity(hass, panel, modern):
+    native = add_native(hass)
+    dr.async_get(hass).async_update_device(native[1].id, name="P4 4inch")
+    source = add_source(
+        hass,
+        native,
+        name="Memory: Heap Free" if modern else "P4 4inch Memory: Heap Free",
+        has_entity_name=modern,
+    )
+    hass.states.async_set(
+        source.entity_id,
+        "30.5",
+        {
+            "friendly_name": "P4 4inch Memory: Heap Free",
+            "unit_of_measurement": "%",
+        },
+    )
+    registry = er.async_get(hass)
+    previous = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        mirror_unique_id(panel, source),
+        config_entry=panel,
+        original_name="P4 4inch Memory: Heap Free",
+        has_entity_name=False,
+        suggested_object_id="saved_heap_sensor",
+    )
+    assert await hass.config_entries.async_setup(panel.entry_id)
+    await hass.async_block_till_done()
+    mirror = registry.async_get(previous.entity_id)
+    assert mirror.has_entity_name
+    assert mirror.original_name == "Memory: Heap Free"
+    assert copy_id(hass, panel, source) == previous.entity_id
+    assert hass.states.get(mirror.entity_id).name == "Kitchen Memory: Heap Free"
+
+    # Custom names on the EspControl copy remain under the user's control.
+    registry.async_update_entity(mirror.entity_id, name="My heap")
+    registry.async_update_entity(source.entity_id, name="Available memory")
+    await hass.async_block_till_done()
+    assert registry.async_get(mirror.entity_id).original_name == "Available memory"
+    assert registry.async_get(mirror.entity_id).name == "My heap"
+
+
+@pytest.mark.parametrize(
+    ("unit", "value", "display"),
+    [
+        ("%", "30.5074863433838", "31"),
+        ("B", "31744.0", "31744"),
+    ],
+)
+async def test_whole_number_display_preserves_measurements(
+    hass, panel, unit, value, display
+):
+    source = add_source(hass, add_native(hass))
+    # Metadata can arrive after the copy is initially created.
+    assert await hass.config_entries.async_setup(panel.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set(source.entity_id, value, {"unit_of_measurement": unit})
+    await hass.async_block_till_done()
+    mirror_id = copy_id(hass, panel, source)
+    state = hass.states.get(mirror_id)
+    assert float(state.state) == float(value)
+    assert async_rounded_state(hass, mirror_id, state) == display
+    registry = er.async_get(hass)
+    assert (
+        registry.async_get(mirror_id).options["sensor"]["suggested_display_precision"]
+        == 0
+    )
+    # Respect an explicit user override of the automatic display precision.
+    registry.async_update_entity_options(mirror_id, "sensor", {"display_precision": 2})
+    await hass.async_block_till_done()
+    assert async_rounded_state(hass, mirror_id, state) == f"{float(value):.2f}"
 
 
 @pytest.mark.parametrize(

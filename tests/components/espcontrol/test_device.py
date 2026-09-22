@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from custom_components.espcontrol.device import mac_from_entry, pairing_url, webserver_url
+from custom_components.espcontrol.device import (
+    mac_from_entry,
+    pairing_url,
+    webserver_url,
+)
 
 
 def test_mac_from_entry_falls_back_to_device_id() -> None:

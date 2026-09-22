@@ -13,10 +13,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_DEVICE_CLASS,
     ATTR_UNIT_OF_MEASUREMENT,
+    PERCENTAGE,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
+    UnitOfInformation,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
@@ -25,6 +27,20 @@ from .mirror import EspControlMirror, async_setup_mirrors
 
 class EspControlSensorMirror(EspControlMirror, SensorEntity):
     """A read-only native sensor copy, including text and timestamp sensors."""
+
+    @property
+    def suggested_display_precision(self) -> int | None:
+        """Show percentages and byte counts as integers without losing history."""
+        if self.native_unit_of_measurement in {PERCENTAGE, UnitOfInformation.BYTES}:
+            return 0
+        return None
+
+    @callback
+    def _source_updated(self, event: Event) -> None:
+        # A source may publish its unit after setup. HA normally initializes
+        # suggested precision when the registry entry is added or updated.
+        self.async_registry_entry_updated()
+        super()._source_updated(event)
 
     @property
     def native_value(self) -> str | float | date | datetime | None:

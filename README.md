@@ -2,77 +2,109 @@
 
 <img src="https://raw.githubusercontent.com/jtenniswood/espcontrol-integration/main/brand/icon.png" alt="EspControl" width="128" height="128">
 
-This repository contains the experimental EspControl integration. It is a HACS-installable
-custom integration and is not a Home Assistant Core contribution.
+A HACS custom integration that connects EspControl displays to Home Assistant.
+It discovers displays, opens their configurator through **Visit**, supplies safe
+entity-selection metadata over the existing ESPHome connection, and mirrors the
+display's native ESPHome sensors and controls. This is an experimental companion integration,
+not a Home Assistant Core integration or a replacement for ESPHome.
 
-## Install with HACS
+## Install and connect
 
-In HACS, open **Custom repositories**, add this GitHub repository, choose
-**Integration**, and install EspControl. Restart Home Assistant, then add the
-EspControl integration from **Settings → Devices & services**.
+1. In HACS, add `jtenniswood/espcontrol-integration` as a custom **Integration** repository.
+2. Install it, restart Home Assistant, and add **EspControl** under **Settings → Devices & services**.
+3. Use firmware advertising `_espcontrol._tcp` protocol `1`. Confirm the discovered display,
+   or enter its stable device ID and host manually. MAC IDs are normalized to prevent duplicate entries.
+4. Keep the same display configured in ESPHome and allow it to perform Home Assistant actions.
+5. Open **Visit** on the display's device page. Native catalog firmware requests
+   `espcontrol.search_entities` through ESPHome; the browser needs no Home Assistant token.
 
-The device firmware must also advertise the `_espcontrol._tcp` service. The
-experimental firmware changes live in the main [EspControl repository](https://github.com/jtenniswood/espcontrol).
+Home Assistant **2026.8.0 or later** is required. The native catalog firmware is
+currently the `show-ha-entity-catalog` feature branch in the
+[firmware repository](https://github.com/jtenniswood/espcontrol/pull/2023).
+See [verified combinations and limitations](docs/compatibility.md) before upgrading.
 
-The integration discovers an EspControl display using the `_espcontrol._tcp`
-Zeroconf service and creates a config entry keyed by the device's stable ID.
-Every discovery gets an EspControl device entry with the device's **Visit**
-link. When the same display is also configured through ESPHome, the integration
-updates the ESPHome device's Visit link too, while native ESPHome entities stay
-owned by the ESPHome device entry.
+The configurator can retain remembered suggestions and manual entity-ID entry
+when catalog access fails. It must report a transport error separately from an
+empty successful search. Firmware owns this browser behavior.
 
+## Devices, sensors and controls
 
-EspControl also creates read-only copies of enabled native ESPHome sensors for
-that panel's MAC address, including binary sensors and text sensors exposed as
-Home Assistant sensors. Copies follow live state changes, source renames, and
-sensors added after startup. Missing, disabled, or unavailable sources make their
-copies unavailable. The native ESPHome integration must remain configured; its
-entities and actions continue to work independently.
+EspControl and ESPHome retain separate device records for the same physical
+panel. EspControl creates read-only copies of enabled native sensor and binary
+sensor entities matching the panel's MAC, including text sensors represented by
+Home Assistant's sensor domain. It also mirrors lights (including display backlight),
+buttons, switches, selectors, numbers, and text settings. Control actions target
+the matching native entity through Home Assistant; ESPHome keeps ownership of
+device communication. Configuration categories, options, and limits are preserved.
 
-After updating, restart Home Assistant to add the copies to each EspControl
-device. Disabled native sensors must first be enabled on the ESPHome device's
-Home Assistant page. Removing EspControl leaves the native entities in place.
+Device pages show short entity labels without repeating the panel name.
+Percentage (`%`) and byte (`B`) sensors display whole numbers while retaining
+the original measurements for history. Explicit display-precision overrides
+and custom names on the EspControl entities are preserved.
 
-The native ESPHome connection is the primary catalog transport. The display
-requests the read-only `espcontrol.search_entities` response action, so a
-fresh browser needs no Home Assistant token, URL-fragment credential, or
-special pairing link. The device must be allowed to perform Home Assistant
-actions. See [the native catalog contract](docs/native-entity-catalog.md).
+Copies follow source state, metadata, renames, and entities added after startup.
+Missing, disabled, or unavailable sources make copies unavailable. Each copy
+exposes `source_entity_id` so its origin is inspectable. Both source and copy
+remain selectable in catalog v1; existing selections are never rewritten.
+Enable a disabled source on the ESPHome device page to create its copy.
 
-The short-lived pairing grant remains temporarily available for older firmware.
-It is scoped to one device, expires after ten minutes, and is never a Home
-Assistant long-lived access token. It will be removed after the native
-protocol transition is complete.
+Discovered address and web-port changes reload the display runtime. Options
+provide a manual address override; that override takes precedence over discovery.
+Both device Visit links update. The integration checks web reachability every
+60 seconds and reports it separately from the native source association and
+available source count. An offline display does not prevent setup.
 
-If an earlier POC version created a separate empty EspControl device, remove
-that old entry once after upgrading. The updated integration recreates the
-EspControl-owned device entry when the display is discovered again; the ESPHome
-device entry and its entities are retained separately.
+## Upgrade and removal
 
-After pairing, the entity endpoint returns a bounded, searchable catalogue. It
-combines live state with entity, device, and area registry metadata and applies
-the field rules in `const.py`. Unknown fields fall back to the all-domain rule,
-so a new Home Assistant domain remains selectable while the configurator is
-updated.
+Existing device IDs, mirror IDs, customizations, and history are retained. The
+config-entry migration is additive (version 1, minor version 2). Old mirror IDs
+are migrated in place when their source is discovered, including after startup.
+Empty EspControl device records are valid and are preserved on reload; do not
+remove them as an upgrade step.
 
-The HTTP contract is:
+Removing or unloading EspControl revokes its legacy pairing grants and stops its
+subscriptions and health timer. Native ESPHome entities are left in place.
+Back up Home Assistant before testing a release. An integration rollback can use
+the previous HACS version; no destructive registry migration is performed.
 
-```text
-GET  /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated redirect)
-POST /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated JSON)
-GET  /api/espcontrol/{device_id}/entities  (X-EspControl-Pairing-Token)
+## Catalog and older firmware
+
+The canonical definitions are in [catalog-v1.json](protocol/catalog-v1.json).
+See the [generated contract reference](docs/catalog-contract.md) for field rules,
+metadata, transport limits, and pagination. Raw state values, arbitrary attributes,
+camera URLs, and credentials are excluded from catalog responses.
+
+[Native transport behavior](docs/native-entity-catalog.md) is the supported path.
+The [legacy compatibility adapter](docs/legacy-catalog.md) remains available for
+older panels until deployed firmware compatibility has been established. Its
+short-lived grants are not Home Assistant access tokens.
+
+## Development and releases
+
+Use Python 3.14 in an isolated environment:
+
+```sh
+python3.14 -m venv .venv
+.venv/bin/python -m pip install -r requirements-test.txt
+.venv/bin/python scripts/check_compatibility.py --ha-version 2026.9.3
+.venv/bin/python -m pytest -q tests/components/espcontrol
 ```
 
-Pairing grants expire after ten minutes and are held in memory in this POC; a
-Home Assistant restart revokes them. The browser client in
-`src/webserver/application/entity_catalog.ts` consumes the native display
-endpoint and keeps a local fallback to remembered entity suggestions.
+Repeat in a separate environment with `requirements-test-min.txt` and
+`--ha-version 2026.8.0`. Tests use real HA services, HTTP routing, registries, and
+entity platforms, with device networking simulated explicitly.
 
-The intended catalogue response contains only selection metadata. Raw entity
-attributes, camera URLs, and access tokens are never forwarded.
+After changing `protocol/catalog-v1.json`, run
+`python3 scripts/generate_contract.py`. CI rejects stale generated Python, TypeScript,
+C++ and documentation. Keep shared fixture expectations independently reviewed.
+Firmware vendors the generated files and fixtures from an exact integration commit;
+its contract check rejects edits to the vendored files.
 
-## Development tests
+The **Release verified integration** workflow accepts an existing version tag,
+pins its commit, runs both compatibility environments, checks the tag matches the
+manifest version, and only then publishes the tagged package. Creating a release
+manually bypasses these checks; use the workflow. No release is published by an
+ordinary push or pull request.
 
-Use Python 3.14 and install `requirements-test.txt` in a virtual environment, then
-run `python -m pytest tests/components/espcontrol`. Tests use Home Assistant's
-registries and entity platforms with device HTTP access mocked out.
+See [architecture and maintenance](docs/architecture.md) for ownership boundaries
+and [compatibility](docs/compatibility.md) for the test matrix and hardware checks.

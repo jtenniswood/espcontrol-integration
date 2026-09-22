@@ -1,18 +1,16 @@
-"""Device registry helpers and HTTP probe for the EspControl web API."""
+"""Stable display identity, address formatting and native device association."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
-from aiohttp import ClientSession, ClientTimeout
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import format_mac
 
-from .const import CONF_DEVICE_ID, CONF_MAC, DOMAIN
+from .const import CONF_DEVICE_ID, CONF_MAC
 
 ESPHOME_DOMAIN = "esphome"
 
@@ -21,6 +19,11 @@ def mac_from_entry(entry: ConfigEntry[Any]) -> str | None:
     """Return the device MAC, including for advertisements without ``mac``."""
 
     value = entry.data.get(CONF_MAC) or entry.data.get(CONF_DEVICE_ID)
+    return parse_mac(value)
+
+
+def parse_mac(value: object) -> str | None:
+    """Validate MAC addresses independently of opaque stable device IDs."""
     if not isinstance(value, str):
         return None
     mac = format_mac(value)
@@ -66,51 +69,6 @@ def find_esphome_device(hass: HomeAssistant, mac: str) -> dr.DeviceEntry | None:
     return None
 
 
-def remove_empty_legacy_device(
-    hass: HomeAssistant,
-    entry: ConfigEntry[Any],
-    device_id: str,
-    keep_device_id: str,
-) -> None:
-    """Remove the empty duplicate created by the first POC implementation."""
-
-    registry = dr.async_get(hass)
-    entity_registry = er.async_get(hass)
-    for device in registry.async_get_devices(
-        identifiers={(DOMAIN, device_id)},
-        config_entry_id=entry.entry_id,
-    ):
-        if device.id == keep_device_id:
-            continue
-        if not er.async_entries_for_device(entity_registry, device.id):
-            registry.async_remove_device(device.id)
-
-
-@dataclass(slots=True)
-class EspControlRuntime:
-    """Runtime state kept per config entry."""
-
-    host: str
-    web_port: int = 80
-    available: bool = False
-    identity: dict[str, object] | None = None
-
-    async def async_probe(self, session: ClientSession) -> bool:
-        """Probe identity without failing setup when the display is offline."""
-
-        url = f"http://{self.host}:{self.web_port}/api/v1/identity"
-        try:
-            async with session.get(url, timeout=ClientTimeout(total=3)) as response:
-                if response.status != 200:
-                    self.available = False
-                    return False
-                payload = await response.json(content_type=None)
-        except Exception:  # noqa: BLE001 - an offline LAN device is expected.
-            self.available = False
-            return False
-        if not isinstance(payload, dict):
-            self.available = False
-            return False
-        self.identity = payload
-        self.available = True
-        return True
+def normalize_device_id(value: str) -> str:
+    """Normalize MAC identities without changing opaque future device IDs."""
+    return parse_mac(value.strip()) or value.strip()

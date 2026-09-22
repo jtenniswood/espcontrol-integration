@@ -7,14 +7,15 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, State
 from homeassistant.helpers import area_registry as ar
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
+from .catalog_model import EntityRecord, entity_matches_rule
 from .const import (
     DEFAULT_CATALOG_LIMIT,
     ENTITY_RULES,
     MAX_CATALOG_LIMIT,
 )
-from .catalog_model import EntityRecord, entity_matches_rule
 
 
 def _entry_value(entry: Any, name: str, default: Any = None) -> Any:
@@ -82,7 +83,9 @@ def _record_for_entity(
     )
     device_name = None
     if device:
-        device_name = _entry_value(device, "name_by_user") or _entry_value(device, "name")
+        device_name = _entry_value(device, "name_by_user") or _entry_value(
+            device, "name"
+        )
     area_id = _entry_value(entry, "area_id") or _entry_value(device, "area_id")
     area = area_registry.async_get_area(area_id) if area_id else None
     state_value = state.state if state else "unknown"
@@ -109,7 +112,12 @@ def _matches_query(record: EntityRecord, query: str) -> bool:
         return True
     haystack = " ".join(
         value or ""
-        for value in (record.entity_id, record.name, record.device_name, record.area_name)
+        for value in (
+            record.entity_id,
+            record.name,
+            record.device_name,
+            record.area_name,
+        )
     ).casefold()
     return query.casefold() in haystack
 

@@ -1,21 +1,26 @@
-"""Read-only mirrors of sensors owned by the panel's native ESPHome entry."""
+"""Mirrors of entities owned by the panel's native ESPHome entry."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ATTR_FRIENDLY_NAME, ATTR_ICON, STATE_UNAVAILABLE
+from homeassistant.const import (
+    ATTR_FRIENDLY_NAME,
+    ATTR_ICON,
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+)
 from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 
-from .const import CONF_DEVICE_ID, DOMAIN, SIGNAL_ESPHOME_ENTITIES_UPDATED
-from .device import ESPHOME_DOMAIN, find_esphome_device, mac_from_entry
+from .const import CONF_DEVICE_ID, DOMAIN
+from .migrations import async_migrate_mirror
 
 
 def mirror_unique_id(entry: ConfigEntry, source: er.RegistryEntry) -> str:
@@ -25,13 +30,14 @@ def mirror_unique_id(entry: ConfigEntry, source: er.RegistryEntry) -> str:
 
 
 class EspControlMirror(Entity):
-    """Share source tracking, metadata and availability across sensor types."""
+    """Share source tracking, metadata and availability across entity types."""
 
     _attr_should_poll = False
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
 
     def __init__(self, entry: ConfigEntry, source: er.RegistryEntry) -> None:
         self._source: er.RegistryEntry | None = source
+        self._source_entity_id = source.entity_id
         self._source_name = source.name or source.original_name or source.entity_id
         self._entry = entry
         self._attr_unique_id = mirror_unique_id(entry, source)
@@ -48,10 +54,27 @@ class EspControlMirror(Entity):
             model=self._entry.data.get("model"),
         )
 
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Preserve explicit source lineage without changing catalog wire v1."""
+        return {"source_entity_id": self._source_entity_id}
+
     def _state(self) -> State | None:
         if self._source is None:
             return None
         return self.hass.states.get(self._source.entity_id)
+
+    def source_attribute(self, name: str, default: Any = None) -> Any:
+        """Read current native metadata, including capabilities learned later."""
+        state = self._state()
+        return state.attributes.get(name, default) if state else default
+
+    @property
+    def source_value(self) -> str | None:
+        state = self._state()
+        if state is None or state.state in {STATE_UNKNOWN, STATE_UNAVAILABLE}:
+            return None
+        return state.state
 
     @property
     def available(self) -> bool:
@@ -59,13 +82,26 @@ class EspControlMirror(Entity):
         return state is not None and state.state != STATE_UNAVAILABLE
 
     @property
-    def name(self) -> str:
-        state = self._state()
-        return (
-            state.attributes.get(ATTR_FRIENDLY_NAME, self._source_name)
-            if state
-            else self._source_name
-        )
+    def name(self) -> str | None:
+        if (source := self._source) is None:
+            return self._source_name
+        # ESPHome already stores the short entity name in the registry. Its
+        # state friendly_name includes the device prefix and must not be reused.
+        name = source.name or source.original_name
+        if not source.has_entity_name:
+            name = name or self.source_attribute(ATTR_FRIENDLY_NAME, source.entity_id)
+            device = (
+                dr.async_get(self.hass).async_get(source.device_id)
+                if source.device_id
+                else None
+            )
+            if device:
+                for prefix in (device.name_by_user, device.name):
+                    if prefix and name.startswith(f"{prefix} "):
+                        name = name[len(prefix) + 1 :]
+                        break
+        self._source_name = name
+        return name
 
     @property
     def icon(self) -> str | None:
@@ -80,6 +116,7 @@ class EspControlMirror(Entity):
             return
         self._source = source
         if source is not None:
+            self._source_entity_id = source.entity_id
             self._source_name = source.name or source.original_name or source.entity_id
             self._attr_entity_category = source.entity_category
         if self._listening:
@@ -121,58 +158,31 @@ def async_setup_mirrors(
     factory: Callable[[ConfigEntry, er.RegistryEntry], EspControlMirror],
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Discover sensors even if ESPHome is added or reloaded after startup."""
+    """Discover entities even if ESPHome is added or reloaded after startup."""
 
     registry = er.async_get(hass)
     mirrors: dict[str, EspControlMirror] = {}
 
-    @callback
-    def reconcile(_event: Event | None = None) -> None:
-        mac = mac_from_entry(entry)
-        device = find_esphome_device(hass, mac) if mac else None
-        sources = (
-            {
-                mirror_unique_id(entry, source): source
-                for source in er.async_entries_for_device(registry, device.id)
-                if source.domain == domain
-                and source.platform == ESPHOME_DOMAIN
-                and source.config_entry_id == device.config_entry_id
-                and not source.disabled
-            }
-            if device
-            else {}
-        )
+    tracker = entry.runtime_data.sources
 
+    @callback
+    def reconcile() -> None:
+        sources = {
+            mirror_unique_id(entry, source): source
+            for source in tracker.sources.values()
+            if source.domain == domain
+        }
         for unique_id, mirror in mirrors.items():
             mirror.async_set_source(sources.get(unique_id))
-
         additions = []
         for unique_id, source in sources.items():
             if unique_id in mirrors:
                 continue
-            # Preserve entity IDs, history and customizations from the draft,
-            # whose unique IDs included the editable source entity ID.
-            if registry.async_get_entity_id(domain, DOMAIN, unique_id) is None:
-                legacy_id = registry.async_get_entity_id(
-                    domain, DOMAIN, f"{entry.data[CONF_DEVICE_ID]}_{source.entity_id}"
-                )
-                if (
-                    legacy_id
-                    and registry.async_get(legacy_id).config_entry_id == entry.entry_id
-                ):
-                    registry.async_update_entity(legacy_id, new_unique_id=unique_id)
+            async_migrate_mirror(registry, entry, source, unique_id)
             mirror = factory(entry, source)
             mirrors[unique_id] = mirror
             additions.append(mirror)
         if additions:
             async_add_entities(additions)
 
-    for event_type in (
-        er.EVENT_ENTITY_REGISTRY_UPDATED,
-        dr.EVENT_DEVICE_REGISTRY_UPDATED,
-    ):
-        entry.async_on_unload(hass.bus.async_listen(event_type, reconcile))
-    entry.async_on_unload(
-        async_dispatcher_connect(hass, SIGNAL_ESPHOME_ENTITIES_UPDATED, reconcile)
-    )
-    reconcile()
+    entry.async_on_unload(tracker.async_subscribe(reconcile))

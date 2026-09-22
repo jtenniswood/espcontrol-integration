@@ -1,0 +1,57 @@
+name: Release verified integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to validate and release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: [self-hosted, linux]
+    outputs:
+      revision: ${{ steps.pin.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - id: pin
+        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+  compatibility:
+    needs: source
+    uses: ./.github/workflows/test.yml
+    with:
+      source_ref: ${{ needs.source.outputs.revision }}
+  publish:
+    needs: [source, compatibility]
+    runs-on: [self-hosted, linux]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.source.outputs.revision }}
+          fetch-depth: 0
+      - name: Check tag and package the tested revision
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          TESTED_REVISION: ${{ needs.source.outputs.revision }}
+        run: |
+          test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$TESTED_REVISION"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          manifest = json.loads(Path("custom_components/espcontrol/manifest.json").read_text())
+          assert os.environ["RELEASE_TAG"].removeprefix("v") == manifest["version"]
+          PY
+          git archive --format=zip --output=espcontrol-integration.zip HEAD custom_components hacs.json LICENSE protocol docs README.md
+      - name: Publish after compatibility checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: gh release create "$RELEASE_TAG" espcontrol-integration.zip --verify-tag --generate-notes
