@@ -21,12 +21,20 @@ The additional service advertises:
 | `web_port` | Existing device web server port |
 
 The custom integration uses the MAC address as its config-entry unique ID, so a
-DHCP address change does not create a second device. This follows Home
-Assistant's discovery and unique-ID rules.
+DHCP address change does not create a second config entry. When an ESPHome
+device with that MAC is already registered, EspControl updates that device's
+configuration URL and leaves entity ownership with ESPHome. EspControl also
+creates its own device registry entry so the display appears under the
+EspControl integration. Home Assistant keeps the native ESPHome entities on
+the ESPHome-owned device because a device can only belong to one config entry.
+
+Upgrading from the first POC may leave an old empty EspControl device in the
+device registry. That legacy entry can be removed once; the ESPHome device and
+its entities are not removed.
 
 Pairing is deliberately two-stage:
 
-1. An authenticated Home Assistant session calls `POST /api/espcontrol/{id}/pair`.
+1. The device's **Visit** action opens the authenticated `GET /api/espcontrol/{id}/pair` redirect (or an authenticated Home Assistant session calls `POST /api/espcontrol/{id}/pair`).
 2. Home Assistant returns a random, ten-minute grant scoped to that device.
 3. The grant is stored only as a SHA-256 digest in the integration process.
 4. The device-hosted configurator sends the grant in
@@ -62,9 +70,12 @@ actions, and secondary entity references. An unknown field uses the generic
 all-domain rule so a future Home Assistant domain remains selectable.
 
 The web configurator keeps the current remembered-entity suggestions as a
-fallback. When a pairing grant exists in the URL fragment, it queries the
-catalogue as the user types. Manual entity IDs remain valid for offline editing
-and migration.
+fallback. The Visit redirect places the pairing grant in the device URL
+fragment, where the configurator stores it locally and queries the catalogue as
+the user types. Manual entity IDs remain valid for offline editing and
+migration. If Home Assistant has no configured internal or external URL, use
+the `create_pairing_token` service or the POST endpoint and open the returned
+pairing URI manually.
 
 ## Home Assistant quality checks to run in a HA checkout
 

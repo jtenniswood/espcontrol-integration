@@ -11,9 +11,13 @@ permissions: {}
 
 jobs:
   validate-hacs:
-    runs-on: ubuntu-latest
+    # The self-hosted runner must have Docker available because hacs/action is a container action.
+    runs-on: [self-hosted, linux]
     steps:
       - name: HACS validation
         uses: hacs/action@main
         with:
           category: integration
+          # The project uses PolyForm Noncommercial, which GitHub does not
+          # expose as a recognized repository license to the HACS validator.
+          ignore: license

@@ -14,30 +14,38 @@ experimental firmware changes live in the main [EspControl repository](https://g
 
 The integration discovers an EspControl display using the `_espcontrol._tcp`
 Zeroconf service and creates a config entry keyed by the device's stable ID.
-Its Visit link points directly to the display's local HTTP server. When the
-same hardware is also configured through ESPHome, EspControl mirrors the
-ESPHome sensor and binary-sensor states onto its own device entry.
+Every discovery gets an EspControl device entry with the device's **Visit**
+link. When the same display is also configured through ESPHome, the integration
+updates the ESPHome device's Visit link too, while native ESPHome entities stay
+owned by the ESPHome device entry.
 
-Mirrors are read-only copies of enabled native ESPHome sensors for the same
-panel MAC address, including text sensors exposed by ESPHome as Home Assistant
-sensors. They follow state changes, source renames, and sensors added after
-startup. Missing, disabled, or unavailable sources make their copies unavailable.
-The native ESPHome integration must remain configured; its entities and actions
-continue to work independently. Removing EspControl leaves them in place.
 
-After installing or updating the integration, restart Home Assistant. The copies
-appear under the matching EspControl device automatically. Disabled native
-sensors must first be enabled in ESPHome's Home Assistant device page.
+EspControl also creates read-only copies of enabled native ESPHome sensors for
+that panel's MAC address, including binary sensors and text sensors exposed as
+Home Assistant sensors. Copies follow live state changes, source renames, and
+sensors added after startup. Missing, disabled, or unavailable sources make their
+copies unavailable. The native ESPHome integration must remain configured; its
+entities and actions continue to work independently.
 
-## Development tests
+After updating, restart Home Assistant to add the copies to each EspControl
+device. Disabled native sensors must first be enabled on the ESPHome device's
+Home Assistant page. Removing EspControl leaves the native entities in place.
 
-Use Python 3.14 and install `requirements-test.txt` in a virtual environment, then
-run `python -m pytest tests/components/espcontrol`. Tests use Home Assistant's
-registries and entity platforms with device HTTP access mocked out.
+The native ESPHome connection is the primary catalog transport. The display
+requests the read-only `espcontrol.search_entities` response action, so a
+fresh browser needs no Home Assistant token, URL-fragment credential, or
+special pairing link. The device must be allowed to perform Home Assistant
+actions. See [the native catalog contract](docs/native-entity-catalog.md).
 
-The integration also offers a short-lived pairing grant. The grant is
-deliberately scoped to one device and is never a Home Assistant long-lived
-access token.
+The short-lived pairing grant remains temporarily available for older firmware.
+It is scoped to one device, expires after ten minutes, and is never a Home
+Assistant long-lived access token. It will be removed after the native
+protocol transition is complete.
+
+If an earlier POC version created a separate empty EspControl device, remove
+that old entry once after upgrading. The updated integration recreates the
+EspControl-owned device entry when the display is discovered again; the ESPHome
+device entry and its entities are retained separately.
 
 After pairing, the entity endpoint returns a bounded, searchable catalogue. It
 combines live state with entity, device, and area registry metadata and applies
@@ -48,16 +56,21 @@ updated.
 The HTTP contract is:
 
 ```text
-POST /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated)
+GET  /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated redirect)
+POST /api/espcontrol/{device_id}/pair       (Home Assistant-authenticated JSON)
 GET  /api/espcontrol/{device_id}/entities  (X-EspControl-Pairing-Token)
 ```
 
 Pairing grants expire after ten minutes and are held in memory in this POC; a
-Home Assistant restart revokes them. Before a production implementation, the
-native API transport must deliver the grant to the display over an authenticated
-physical pairing flow. The browser client in `src/webserver/application/entity_catalog.ts`
-consumes the catalogue and keeps a local fallback to the existing remembered
-entity suggestions.
+Home Assistant restart revokes them. The browser client in
+`src/webserver/application/entity_catalog.ts` consumes the native display
+endpoint and keeps a local fallback to remembered entity suggestions.
 
 The intended catalogue response contains only selection metadata. Raw entity
 attributes, camera URLs, and access tokens are never forwarded.
+
+## Development tests
+
+Use Python 3.14 and install `requirements-test.txt` in a virtual environment, then
+run `python -m pytest tests/components/espcontrol`. Tests use Home Assistant's
+registries and entity platforms with device HTTP access mocked out.

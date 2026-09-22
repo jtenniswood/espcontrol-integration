@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from homeassistant.core import HomeAssistant, State
@@ -23,10 +23,9 @@ def _entry_value(entry: Any, name: str, default: Any = None) -> Any:
     return getattr(entry, name, default)
 
 
-def _capabilities(state: State) -> tuple[str, ...]:
+def _capabilities(attributes: Mapping[str, Any]) -> tuple[str, ...]:
     """Extract capability names without exposing raw entity attributes."""
 
-    attributes = state.attributes
     result: set[str] = set()
     supported = attributes.get("supported_features")
     if supported is not None:
@@ -56,30 +55,40 @@ def _capabilities(state: State) -> tuple[str, ...]:
     return tuple(sorted(result))
 
 
-def _record_for_state(
-    state: State,
+def _record_for_entity(
+    entity_id: str,
+    state: State | None,
+    entry: Any,
     entity_registry: er.EntityRegistry,
     device_registry: dr.DeviceRegistry,
     area_registry: ar.AreaRegistry,
 ) -> EntityRecord:
-    """Build one catalogue item from state and registry metadata."""
+    """Build one catalogue item from state and registry metadata.
 
-    entry = entity_registry.async_get(state.entity_id)
+    Entity registry entries are included even when an entity has no state. This
+    is required for disabled entities and for integrations that have not yet
+    published a state object.
+    """
+
     device = None
     if entry and entry.device_id:
         device = device_registry.async_get(entry.device_id)
-    attributes = state.attributes
+    attributes = state.attributes if state else {}
     name = (
         _entry_value(entry, "name")
+        or _entry_value(entry, "original_name")
         or attributes.get("friendly_name")
-        or state.entity_id
+        or entity_id
     )
-    device_name = _entry_value(device, "name") if device else None
+    device_name = None
+    if device:
+        device_name = _entry_value(device, "name_by_user") or _entry_value(device, "name")
     area_id = _entry_value(entry, "area_id") or _entry_value(device, "area_id")
     area = area_registry.async_get_area(area_id) if area_id else None
+    state_value = state.state if state else "unknown"
     return EntityRecord(
-        entity_id=state.entity_id,
-        domain=state.entity_id.split(".", 1)[0],
+        entity_id=entity_id,
+        domain=entity_id.split(".", 1)[0],
         device_id=entry.device_id if entry else None,
         name=str(name),
         device_name=device_name,
@@ -87,11 +96,11 @@ def _record_for_state(
         device_class=attributes.get("device_class"),
         icon=attributes.get("icon"),
         unit=attributes.get("unit_of_measurement"),
-        state=state.state,
-        available=state.state not in {"unknown", "unavailable"},
+        state=state_value,
+        available=state is not None and state_value not in {"unknown", "unavailable"},
         disabled=bool(_entry_value(entry, "disabled_by")),
         hidden=bool(_entry_value(entry, "hidden_by")),
-        capabilities=_capabilities(state),
+        capabilities=_capabilities(attributes),
     )
 
 
@@ -114,6 +123,7 @@ def build_entity_catalog(
     device_id: str | None = None,
     include_hidden: bool = False,
     include_disabled: bool = False,
+    capabilities: Iterable[str] = (),
     limit: int = DEFAULT_CATALOG_LIMIT,
     cursor: int = 0,
 ) -> tuple[list[dict[str, Any]], int | None]:
@@ -124,14 +134,27 @@ def build_entity_catalog(
     entity_registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
     area_registry = ar.async_get(hass)
+    states = {state.entity_id: state for state in hass.states.async_all()}
+    registered_entities: Mapping[str, Any] = getattr(entity_registry, "entities", {})
+    entity_ids = set(states)
+    entity_ids.update(registered_entities)
+    required_capabilities = frozenset(capabilities)
     records: Iterable[EntityRecord] = (
-        _record_for_state(state, entity_registry, device_registry, area_registry)
-        for state in hass.states.async_all()
+        _record_for_entity(
+            entity_id,
+            states.get(entity_id),
+            registered_entities.get(entity_id) or entity_registry.async_get(entity_id),
+            entity_registry,
+            device_registry,
+            area_registry,
+        )
+        for entity_id in entity_ids
     )
     filtered = [
         record
         for record in records
         if entity_matches_rule(record, rule)
+        and required_capabilities.issubset(set(record.capabilities))
         and _matches_query(record, query)
         and (area is None or record.area_name == area)
         and (device_id is None or record.device_id == device_id)

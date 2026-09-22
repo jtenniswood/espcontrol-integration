@@ -13,7 +13,14 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 
 from .catalog import build_entity_catalog
-from .const import CONF_HOST, DEFAULT_CATALOG_LIMIT, DOMAIN, PAIRING_TOKEN_HEADER
+from .const import (
+    CONF_DEVICE_ID,
+    CONF_HOST,
+    CONF_WEB_PORT,
+    DEFAULT_CATALOG_LIMIT,
+    DOMAIN,
+    PAIRING_TOKEN_HEADER,
+)
 from .pairing import PairingStore
 
 
@@ -28,33 +35,61 @@ class EspControlPairingView(HomeAssistantView):
         self._hass = hass
         self._pairing = pairing
 
-    async def post(self, request: web.Request, device_id: str) -> web.Response:
-        """Issue a short-lived token; the long-lived HA token never leaves HA."""
-
-        entry = next(
+    def _entry(self, device_id: str):
+        return next(
             (
                 candidate
                 for candidate in self._hass.config_entries.async_entries(DOMAIN)
-                if candidate.data.get("device_id") == device_id
+                if candidate.data.get(CONF_DEVICE_ID) == device_id
                 and candidate.state is ConfigEntryState.LOADED
             ),
             None,
         )
-        if entry is None:
-            return web.json_response({"error": "unknown_device"}, status=HTTPStatus.NOT_FOUND)
-        grant = self._pairing.issue(device_id)
+
+    def _pairing_uri(self, request: web.Request, entry, grant) -> str | None:
+        device_host = (
+            entry.options.get(CONF_HOST, entry.data.get(CONF_HOST)) if entry else None
+        )
+        if not device_host:
+            return None
+        device_port = entry.options.get(
+            CONF_WEB_PORT, entry.data.get(CONF_WEB_PORT, 80)
+        )
+        if ":" in device_host and not device_host.startswith("["):
+            device_host = f"[{device_host}]"
         base_url = f"{request.scheme}://{request.host}"
         pairing_payload = base64.urlsafe_b64encode(
             json.dumps(
-                {"baseUrl": base_url, "deviceId": device_id, "token": grant.token},
+                {
+                    "baseUrl": base_url,
+                    "deviceId": entry.data[CONF_DEVICE_ID],
+                    "token": grant.token,
+                },
                 separators=(",", ":"),
             ).encode()
         ).decode().rstrip("=")
-        device_host = (
-            entry.options.get(CONF_HOST, entry.data.get(CONF_HOST))
-            if entry
-            else None
-        )
+        return f"http://{device_host}:{device_port}/#espcontrol-pairing={pairing_payload}"
+
+    async def get(self, request: web.Request, device_id: str) -> web.Response:
+        """Issue a grant and redirect the authenticated user to the display."""
+
+        entry = self._entry(device_id)
+        if entry is None:
+            return web.json_response({"error": "unknown_device"}, status=HTTPStatus.NOT_FOUND)
+        grant = self._pairing.issue(device_id)
+        pairing_uri = self._pairing_uri(request, entry, grant)
+        if pairing_uri is None:
+            return web.json_response({"error": "device_host_unavailable"}, status=HTTPStatus.CONFLICT)
+        raise web.HTTPFound(pairing_uri)
+
+    async def post(self, request: web.Request, device_id: str) -> web.Response:
+        """Issue a short-lived token; the long-lived HA token never leaves HA."""
+
+        entry = self._entry(device_id)
+        if entry is None:
+            return web.json_response({"error": "unknown_device"}, status=HTTPStatus.NOT_FOUND)
+        grant = self._pairing.issue(device_id)
+        pairing_uri = self._pairing_uri(request, entry, grant)
         return self.json(
             {
                 "device_id": device_id,
@@ -62,11 +97,7 @@ class EspControlPairingView(HomeAssistantView):
                 "expires_at": grant.expires_at,
                 "header": PAIRING_TOKEN_HEADER,
                 "catalog_path": f"/api/espcontrol/{device_id}/entities",
-                "pairing_uri": (
-                    f"http://{device_host}/#espcontrol-pairing={pairing_payload}"
-                    if device_host
-                    else None
-                ),
+                "pairing_uri": pairing_uri,
             }
         )
 
@@ -121,6 +152,12 @@ class EspControlEntityView(HomeAssistantView):
             query=request.query.get("q", "").strip(),
             field=request.query.get("field", "entity"),
             area=request.query.get("area") or None,
+            device_id=request.query.get("device_id") or None,
+            capabilities=tuple(
+                value.strip()
+                for value in request.query.get("capabilities", "").split(",")
+                if value.strip()
+            ),
             include_hidden=request.query.get("include_hidden") == "1",
             include_disabled=request.query.get("include_disabled") == "1",
             limit=limit,

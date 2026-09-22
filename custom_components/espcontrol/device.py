@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 from aiohttp import ClientSession, ClientTimeout
 from homeassistant.config_entries import ConfigEntry
@@ -40,8 +41,16 @@ def webserver_url(host: str, port: int) -> str:
     display_host = host
     if ":" in display_host and not display_host.startswith("["):
         display_host = f"[{display_host}]"
-    port_suffix = "" if port == 80 else f":{port}"
-    return f"http://{display_host}{port_suffix}"
+    return f"http://{display_host}:{port}"
+
+
+def pairing_url(hass: HomeAssistant, device_id: str) -> str | None:
+    """Return the authenticated HA redirect used by the device Visit action."""
+
+    base_url = hass.config.internal_url or hass.config.external_url
+    if not base_url:
+        return None
+    return f"{base_url.rstrip('/')}/api/espcontrol/{quote(device_id, safe='')}/pair"
 
 
 def find_esphome_device(hass: HomeAssistant, mac: str) -> dr.DeviceEntry | None:

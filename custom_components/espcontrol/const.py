@@ -22,6 +22,8 @@ DEFAULT_CATALOG_LIMIT = 50
 
 SERVICE_CREATE_PAIRING_TOKEN = "create_pairing_token"
 SIGNAL_ESPHOME_ENTITIES_UPDATED = "espcontrol_esphome_entities_updated"
+SERVICE_SEARCH_ENTITIES = "search_entities"
+CATALOG_PROTOCOL_VERSION = 1
 
 
 @dataclass(frozen=True, slots=True)
