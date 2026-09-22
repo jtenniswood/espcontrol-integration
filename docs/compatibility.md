@@ -20,6 +20,10 @@ legacy HTTP authentication and CORS, token expiration/removal, saved-entry and
 mirror migrations, source changes, repeated reloads, address changes, IPv6,
 offline recovery, and subscription cleanup. Real HA registries and entity
 platforms are exercised; device identity HTTP responses are simulated in tests.
+Control coverage includes native action targets and context, configuration limits,
+renames, disabled sources, late capabilities, and propagated native errors.
+Device-page naming and integer percentage/byte presentation are covered, including
+existing entity identities and user name/precision overrides.
 
 ## Hardware acceptance before broad rollout
 
@@ -35,6 +39,11 @@ Test one native catalog panel and any panel still requiring legacy pairing:
 5. Reload and restart HA; verify no duplicate device or sensor IDs and recovery
    after the panel was offline during startup.
 6. Verify any older firmware's pairing flow before retiring the adapter.
+7. On the EspControl device page, verify that backlight and wake controls affect
+   the matching panel and that configuration selectors show the native options.
+   Confirm diagnostic labels omit the repeated device name and percentage/byte
+   values show whole numbers. No physical control actions were run by the automated
+   tests; their outgoing native calls were intercepted.
 
 The documented panel at `192.168.6.102` answered a read-only identity request on
 2026-09-22, but its response exposed names/address only, without firmware version
