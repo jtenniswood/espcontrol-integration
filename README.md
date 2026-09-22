@@ -19,6 +19,18 @@ link. When the same display is also configured through ESPHome, the integration
 updates the ESPHome device's Visit link too, while native ESPHome entities stay
 owned by the ESPHome device entry.
 
+
+EspControl also creates read-only copies of enabled native ESPHome sensors for
+that panel's MAC address, including binary sensors and text sensors exposed as
+Home Assistant sensors. Copies follow live state changes, source renames, and
+sensors added after startup. Missing, disabled, or unavailable sources make their
+copies unavailable. The native ESPHome integration must remain configured; its
+entities and actions continue to work independently.
+
+After updating, restart Home Assistant to add the copies to each EspControl
+device. Disabled native sensors must first be enabled on the ESPHome device's
+Home Assistant page. Removing EspControl leaves the native entities in place.
+
 The native ESPHome connection is the primary catalog transport. The display
 requests the read-only `espcontrol.search_entities` response action, so a
 fresh browser needs no Home Assistant token, URL-fragment credential, or
@@ -56,3 +68,9 @@ endpoint and keeps a local fallback to remembered entity suggestions.
 
 The intended catalogue response contains only selection metadata. Raw entity
 attributes, camera URLs, and access tokens are never forwarded.
+
+## Development tests
+
+Use Python 3.14 and install `requirements-test.txt` in a virtual environment, then
+run `python -m pytest tests/components/espcontrol`. Tests use Home Assistant's
+registries and entity platforms with device HTTP access mocked out.

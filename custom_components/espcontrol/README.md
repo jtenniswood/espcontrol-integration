@@ -10,6 +10,18 @@ ESPHome already owns the same MAC address, setup updates that ESPHome device's
 configuration URL as well, while native ESPHome entities remain on the ESPHome
 device entry.
 
+
+EspControl also creates read-only copies of enabled native ESPHome sensors for
+that panel's MAC address, including binary sensors and text sensors exposed as
+Home Assistant sensors. Copies follow live state changes, source renames, and
+sensors added after startup. Missing, disabled, or unavailable sources make their
+copies unavailable. The native ESPHome integration must remain configured; its
+entities and actions continue to work independently.
+
+After updating, restart Home Assistant to add the copies to each EspControl
+device. Disabled native sensors must first be enabled on the ESPHome device's
+Home Assistant page. Removing EspControl leaves the native entities in place.
+
 The display now uses the existing authenticated ESPHome connection to request
 catalogue pages. Home Assistant exposes the read-only `espcontrol.search_entities`
 action, and the firmware forwards browser searches over that connection. The

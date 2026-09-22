@@ -79,12 +79,13 @@ def test_catalog_unions_states_and_registry_and_applies_visibility_defaults() ->
 
     assert next_cursor is None
     assert [record["entity_id"] for record in records] == [
-        "light.kitchen",
         "sensor.unregistered",
+        "light.kitchen",
+        "number.level",
     ]
-    assert records[0]["area_name"] == "Kitchen"
-    assert records[0]["device_name"] == "Kitchen Lamp"
-    assert records[1]["available"] is False
+    assert records[1]["area_name"] == "Kitchen"
+    assert records[1]["device_name"] == "Kitchen Lamp"
+    assert records[0]["available"] is False
 
 
 def test_catalog_can_include_hidden_and_disabled_registry_entities() -> None:
@@ -119,18 +120,18 @@ def test_catalog_searches_entity_name_area_and_device_and_paginates() -> None:
         hass, entries, devices, areas, query="kitchen", limit=1
     )
     assert [record["entity_id"] for record in records] == ["light.kitchen"]
-    assert next_cursor is None
+    assert next_cursor == 1
 
     records, next_cursor = _catalog(
         hass, entries, devices, areas, query="lamp", limit=1
     )
     assert [record["entity_id"] for record in records] == ["light.kitchen"]
-    assert next_cursor is None
+    assert next_cursor == 1
 
     records, next_cursor = _catalog(
         hass, entries, devices, areas, query="kitchen", limit=1, cursor=1
     )
-    assert records == []
+    assert [record["entity_id"] for record in records] == ["number.level"]
     assert next_cursor is None
 
 

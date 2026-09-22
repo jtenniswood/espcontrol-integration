@@ -6,11 +6,20 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+from homeassistant.core import (
+    Event,
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .api import register_views
 from .const import (
@@ -18,6 +27,7 @@ from .const import (
     CONF_HOST,
     CONF_WEB_PORT,
     DOMAIN,
+    SIGNAL_ESPHOME_ENTITIES_UPDATED,
     CATALOG_PROTOCOL_VERSION,
     SERVICE_CREATE_PAIRING_TOKEN,
     SERVICE_SEARCH_ENTITIES,
@@ -33,6 +43,8 @@ from .device import (
 
 type EspControlConfigEntry = ConfigEntry[EspControlRuntime]
 
+PLATFORMS = ("sensor", "binary_sensor")
+
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up the integration and its authenticated pairing API."""
@@ -40,6 +52,14 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     pairing = PairingStore()
     hass.data[DOMAIN] = {"pairing": pairing}
     register_views(hass, pairing)
+
+    @callback
+    def _async_home_assistant_started(_event: Event) -> None:
+        # ESPHome may finish loading after this config entry. A final startup
+        # scan ensures the mirrors see entities regardless of setup order.
+        async_dispatcher_send(hass, SIGNAL_ESPHOME_ENTITIES_UPDATED)
+
+    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _async_home_assistant_started)
 
     async def create_pairing_token(call: ServiceCall) -> ServiceResponse:
         device_id = call.data[CONF_DEVICE_ID]
@@ -159,11 +179,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: EspControlConfigEntry) -
     )
     hass.data[DOMAIN][entry.entry_id] = runtime
     await runtime.async_probe(async_get_clientsession(hass))
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # The ESPHome entry is normally loaded first, but discovery order is not a
+    # contract. This lets the mirror platforms rescan after both entries load.
+    async_dispatcher_send(hass, SIGNAL_ESPHOME_ENTITIES_UPDATED)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: EspControlConfigEntry) -> bool:
     """Unload one display runtime."""
 
-    hass.data[DOMAIN].pop(entry.entry_id, None)
-    return True
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+    return unload_ok

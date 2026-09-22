@@ -100,8 +100,10 @@ Bronze quality-scale test suite.
 ## Known POC boundary
 
 The current runtime probes the existing device HTTP identity endpoint and owns
-the catalogue API, but it does not yet replace ESPHome's native API connection
-for state subscriptions and actions. That transport must be implemented and
-tested before this can be considered a production integration. Keeping that
-boundary explicit prevents the catalogue experiment from silently creating a
-second action path or duplicating ESPHome state delivery.
+the catalogue API, but it does not replace ESPHome's native API connection for
+actions. Sensor and binary-sensor entities are read-only mirrors of the native
+ESPHome states; they do not create a second action path. A production version
+still needs validation of its production native transport. Mirror lifecycle
+tests cover state and metadata copying, late discovery, source renames,
+availability, disabling/removal, existing mirror migration, and reloads using
+Home Assistant's registries and entity platforms.
