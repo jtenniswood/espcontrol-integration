@@ -1,5 +1,7 @@
 # EspControl Integration proof of concept
 
+<img src="https://raw.githubusercontent.com/jtenniswood/espcontrol-integration/main/brand/icon.png" alt="EspControl" width="128" height="128">
+
 This directory is a local custom integration prototype. It is not a Home
 Assistant Core contribution.
 
