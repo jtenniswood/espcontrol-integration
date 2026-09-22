@@ -13,6 +13,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 
 from .catalog import build_entity_catalog
+from .catalog_contract import CATALOG_PROTOCOL_VERSION, TRANSPORTS
 from .const import (
     CONF_DEVICE_ID,
     CONF_HOST,
@@ -21,6 +22,7 @@ from .const import (
     DOMAIN,
     PAIRING_TOKEN_HEADER,
 )
+from .device import webserver_url
 from .pairing import PairingStore
 
 
@@ -58,28 +60,38 @@ class EspControlPairingView(HomeAssistantView):
         if ":" in device_host and not device_host.startswith("["):
             device_host = f"[{device_host}]"
         base_url = f"{request.scheme}://{request.host}"
-        pairing_payload = base64.urlsafe_b64encode(
-            json.dumps(
-                {
-                    "baseUrl": base_url,
-                    "deviceId": entry.data[CONF_DEVICE_ID],
-                    "token": grant.token,
-                },
-                separators=(",", ":"),
-            ).encode()
-        ).decode().rstrip("=")
-        return f"http://{device_host}:{device_port}/#espcontrol-pairing={pairing_payload}"
+        pairing_payload = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    {
+                        "baseUrl": base_url,
+                        "deviceId": entry.data[CONF_DEVICE_ID],
+                        "token": grant.token,
+                    },
+                    separators=(",", ":"),
+                ).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
+        return (
+            f"http://{device_host}:{device_port}/#espcontrol-pairing={pairing_payload}"
+        )
 
     async def get(self, request: web.Request, device_id: str) -> web.Response:
         """Issue a grant and redirect the authenticated user to the display."""
 
         entry = self._entry(device_id)
         if entry is None:
-            return web.json_response({"error": "unknown_device"}, status=HTTPStatus.NOT_FOUND)
+            return web.json_response(
+                {"error": "unknown_device"}, status=HTTPStatus.NOT_FOUND
+            )
         grant = self._pairing.issue(device_id)
         pairing_uri = self._pairing_uri(request, entry, grant)
         if pairing_uri is None:
-            return web.json_response({"error": "device_host_unavailable"}, status=HTTPStatus.CONFLICT)
+            return web.json_response(
+                {"error": "device_host_unavailable"}, status=HTTPStatus.CONFLICT
+            )
         raise web.HTTPFound(pairing_uri)
 
     async def post(self, request: web.Request, device_id: str) -> web.Response:
@@ -87,7 +99,9 @@ class EspControlPairingView(HomeAssistantView):
 
         entry = self._entry(device_id)
         if entry is None:
-            return web.json_response({"error": "unknown_device"}, status=HTTPStatus.NOT_FOUND)
+            return web.json_response(
+                {"error": "unknown_device"}, status=HTTPStatus.NOT_FOUND
+            )
         grant = self._pairing.issue(device_id)
         pairing_uri = self._pairing_uri(request, entry, grant)
         return self.json(
@@ -119,13 +133,30 @@ class EspControlEntityView(HomeAssistantView):
     def _allowed_origin(self, device_id: str, origin: str | None) -> str | None:
         if not origin:
             return None
-        parsed = urlsplit(origin)
-        if not parsed.hostname:
+        try:
+            parsed = urlsplit(origin)
+            port = parsed.port or 80
+        except ValueError:
+            return None
+        if (
+            parsed.scheme != "http"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+        ):
             return None
         for entry in self._hass.config_entries.async_entries(DOMAIN):
             if (
                 entry.data.get("device_id") == device_id
-                and entry.options.get(CONF_HOST, entry.data.get(CONF_HOST)) == parsed.hostname
+                and entry.state is ConfigEntryState.LOADED
+                and webserver_url(
+                    entry.options.get(CONF_HOST, entry.data[CONF_HOST]),
+                    entry.options.get(CONF_WEB_PORT, entry.data.get(CONF_WEB_PORT, 80)),
+                )
+                == webserver_url(parsed.hostname, port)
             ):
                 return origin
         return None
@@ -140,13 +171,29 @@ class EspControlEntityView(HomeAssistantView):
             # the standard Authorization header used for CORS requests.
             token = request.headers.get("X-EspControl-Pairing-Token", "")
         if not self._pairing.validate(device_id, token):
-            return web.json_response({"error": "invalid_pairing"}, status=HTTPStatus.UNAUTHORIZED)
+            return web.json_response(
+                {"error": "invalid_pairing"}, status=HTTPStatus.UNAUTHORIZED
+            )
         origin = self._allowed_origin(device_id, request.headers.get("Origin"))
+        if request.headers.get("Origin") and origin is None:
+            return web.json_response(
+                {"error": "invalid_origin"}, status=HTTPStatus.FORBIDDEN
+            )
+        if not any(
+            entry.data.get(CONF_DEVICE_ID) == device_id
+            and entry.state is ConfigEntryState.LOADED
+            for entry in self._hass.config_entries.async_entries(DOMAIN)
+        ):
+            return web.json_response(
+                {"error": "unknown_device"}, status=HTTPStatus.NOT_FOUND
+            )
         try:
             limit = int(request.query.get("limit", DEFAULT_CATALOG_LIMIT))
             cursor = int(request.query.get("cursor", "0"))
         except ValueError:
-            return web.json_response({"error": "invalid_pagination"}, status=HTTPStatus.BAD_REQUEST)
+            return web.json_response(
+                {"error": "invalid_pagination"}, status=HTTPStatus.BAD_REQUEST
+            )
         entities, next_cursor = build_entity_catalog(
             self._hass,
             query=request.query.get("q", "").strip(),
@@ -165,15 +212,15 @@ class EspControlEntityView(HomeAssistantView):
         )
         response = self.json(
             {
-                "protocol": 1,
+                TRANSPORTS["legacy_http"]["version_key"]: CATALOG_PROTOCOL_VERSION,
                 "device_id": device_id,
                 "entities": entities,
                 "next_cursor": next_cursor,
             }
         )
-        if origin:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Vary"] = "Origin"
+        # HA's aiohttp_cors handler owns response headers and preflight. Setting
+        # Access-Control-Allow-Origin here makes that handler assert and drops
+        # the connection. The request origin was already checked above.
         return response
 
 

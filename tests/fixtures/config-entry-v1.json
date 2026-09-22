@@ -1,0 +1,12 @@
+{
+  "title": "Old",
+  "version": 1,
+  "minor_version": 1,
+  "unique_id": "AA:BB:CC:DD:EE:FF",
+  "data": {
+    "device_id": "AA:BB:CC:DD:EE:FF",
+    "host": "192.0.2.10",
+    "web_port": 80
+  },
+  "options": {}
+}

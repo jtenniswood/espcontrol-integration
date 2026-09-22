@@ -44,10 +44,14 @@ class PairingTests(unittest.TestCase):
         with patch("custom_components.espcontrol.pairing.time.time", return_value=now):
             store = PairingStore()
             grant = store.issue("panel-1", ttl=30)
-        with patch("custom_components.espcontrol.pairing.time.time", return_value=now + 31):
+        with patch(
+            "custom_components.espcontrol.pairing.time.time", return_value=now + 31
+        ):
             self.assertFalse(store.validate("panel-1", grant.token))
 
     def test_field_rules_cover_known_and_future_domains(self) -> None:
         self.assertTrue(entity_matches_rule(_record("light"), ENTITY_RULES["light"]))
         self.assertFalse(entity_matches_rule(_record("switch"), ENTITY_RULES["light"]))
-        self.assertTrue(entity_matches_rule(_record("future_domain"), ENTITY_RULES["entity"]))
+        self.assertTrue(
+            entity_matches_rule(_record("future_domain"), ENTITY_RULES["entity"])
+        )

@@ -32,13 +32,17 @@ def _entry(
 
 def _hass() -> SimpleNamespace:
     entries = {
-        "light.kitchen": _entry(name="Kitchen Lights", device_id="lamp-1", area_id="kitchen"),
+        "light.kitchen": _entry(
+            name="Kitchen Lights", device_id="lamp-1", area_id="kitchen"
+        ),
         "light.hidden": _entry(name="Hidden Light", hidden_by="user"),
         "switch.disabled": _entry(name="Disabled Switch", disabled_by="user"),
         "number.level": _entry(name="Level", device_id="lamp-1", area_id="kitchen"),
     }
     devices = {
-        "lamp-1": SimpleNamespace(name="Kitchen Lamp", name_by_user=None, area_id="kitchen"),
+        "lamp-1": SimpleNamespace(
+            name="Kitchen Lamp", name_by_user=None, area_id="kitchen"
+        ),
     }
     areas = {
         "kitchen": SimpleNamespace(name="Kitchen"),
@@ -48,7 +52,9 @@ def _hass() -> SimpleNamespace:
             async_all=lambda: [
                 _state("light.kitchen", brightness=255),
                 _state("light.hidden"),
-                _state("sensor.unregistered", "unavailable", friendly_name="Garage Air"),
+                _state(
+                    "sensor.unregistered", "unavailable", friendly_name="Garage Air"
+                ),
                 _state("number.level", "42", min=0, max=100),
             ]
         )
@@ -56,18 +62,29 @@ def _hass() -> SimpleNamespace:
     return hass, entries, devices, areas
 
 
-def _catalog(hass: SimpleNamespace, entries: dict, devices: dict, areas: dict, **kwargs):
+def _catalog(
+    hass: SimpleNamespace, entries: dict, devices: dict, areas: dict, **kwargs
+):
     with (
-        patch("custom_components.espcontrol.catalog.er.async_get", return_value=SimpleNamespace(
-            entities=entries,
-            async_get=lambda entity_id: entries.get(entity_id),
-        )),
-        patch("custom_components.espcontrol.catalog.dr.async_get", return_value=SimpleNamespace(
-            async_get=lambda device_id: devices.get(device_id),
-        )),
-        patch("custom_components.espcontrol.catalog.ar.async_get", return_value=SimpleNamespace(
-            async_get_area=lambda area_id: areas.get(area_id),
-        )),
+        patch(
+            "custom_components.espcontrol.catalog.er.async_get",
+            return_value=SimpleNamespace(
+                entities=entries,
+                async_get=lambda entity_id: entries.get(entity_id),
+            ),
+        ),
+        patch(
+            "custom_components.espcontrol.catalog.dr.async_get",
+            return_value=SimpleNamespace(
+                async_get=lambda device_id: devices.get(device_id),
+            ),
+        ),
+        patch(
+            "custom_components.espcontrol.catalog.ar.async_get",
+            return_value=SimpleNamespace(
+                async_get_area=lambda area_id: areas.get(area_id),
+            ),
+        ),
     ):
         return build_entity_catalog(hass, **kwargs)
 
@@ -108,7 +125,9 @@ def test_catalog_can_include_hidden_and_disabled_registry_entities() -> None:
         "number.level",
         "switch.disabled",
     }
-    disabled = next(record for record in records if record["entity_id"] == "switch.disabled")
+    disabled = next(
+        record for record in records if record["entity_id"] == "switch.disabled"
+    )
     assert disabled["disabled"] is True
     assert disabled["available"] is False
 

@@ -24,10 +24,15 @@ class PairingStore:
     def __init__(self) -> None:
         self._grants: dict[str, tuple[str, int]] = {}
 
-    def issue(self, device_id: str, ttl: int = PAIRING_TOKEN_TTL_SECONDS) -> PairingGrant:
+    def issue(
+        self, device_id: str, ttl: int = PAIRING_TOKEN_TTL_SECONDS
+    ) -> PairingGrant:
         token = secrets.token_urlsafe(32)
         expires_at = int(time.time()) + max(30, ttl)
-        self._grants[device_id] = (hashlib.sha256(token.encode()).hexdigest(), expires_at)
+        self._grants[device_id] = (
+            hashlib.sha256(token.encode()).hexdigest(),
+            expires_at,
+        )
         return PairingGrant(token, expires_at)
 
     def validate(self, device_id: str, token: str) -> bool:
@@ -38,7 +43,9 @@ class PairingStore:
         if expires_at <= int(time.time()):
             self._grants.pop(device_id, None)
             return False
-        return secrets.compare_digest(digest, hashlib.sha256(token.encode()).hexdigest())
+        return secrets.compare_digest(
+            digest, hashlib.sha256(token.encode()).hexdigest()
+        )
 
     def revoke(self, device_id: str) -> None:
         self._grants.pop(device_id, None)

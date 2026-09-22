@@ -1,8 +1,10 @@
-"""Constants for the EspControl proof-of-concept integration."""
+"""Integration identifiers and generated catalog field rules."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from .catalog_contract import FIELD_DOMAINS, TRANSPORTS
 
 DOMAIN = "espcontrol"
 CONF_DEVICE_ID = "device_id"
@@ -17,13 +19,9 @@ DEFAULT_PORT = 6053
 PROTOCOL_VERSION = 1
 PAIRING_TOKEN_HEADER = "Authorization"
 PAIRING_TOKEN_TTL_SECONDS = 600
-MAX_CATALOG_LIMIT = 100
-DEFAULT_CATALOG_LIMIT = 50
 
 SERVICE_CREATE_PAIRING_TOKEN = "create_pairing_token"
-SIGNAL_ESPHOME_ENTITIES_UPDATED = "espcontrol_esphome_entities_updated"
 SERVICE_SEARCH_ENTITIES = "search_entities"
-CATALOG_PROTOCOL_VERSION = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,51 +33,11 @@ class EntityRule:
     allow_any_domain: bool = False
 
 
-# This is deliberately field-oriented rather than card-oriented. Every entity
-# reference in the configurator can point at one of these rules, including
-# secondary media, action, cover and subpage references.
-ENTITY_RULES: dict[str, EntityRule] = {
-    "entity": EntityRule(allow_any_domain=True),
-    "state_entity": EntityRule(allow_any_domain=True),
-    "sensor": EntityRule(
-        frozenset({"sensor", "binary_sensor", "text_sensor", "input_number"})
-    ),
-    "binary_sensor": EntityRule(frozenset({"binary_sensor"})),
-    "text_sensor": EntityRule(frozenset({"text_sensor"})),
-    "light": EntityRule(frozenset({"light"})),
-    "fan": EntityRule(frozenset({"fan"})),
-    "climate": EntityRule(frozenset({"climate"})),
-    "cover": EntityRule(frozenset({"cover"})),
-    "lock": EntityRule(frozenset({"lock"})),
-    "alarm": EntityRule(frozenset({"alarm_control_panel"})),
-    "media_player": EntityRule(frozenset({"media_player"})),
-    "vacuum": EntityRule(frozenset({"vacuum"})),
-    "lawn_mower": EntityRule(frozenset({"lawn_mower"})),
-    "weather": EntityRule(frozenset({"weather"})),
-    "camera": EntityRule(frozenset({"camera", "image"})),
-    "select": EntityRule(frozenset({"select", "input_select"})),
-    "number": EntityRule(frozenset({"number", "input_number"})),
-    "switch": EntityRule(frozenset({"switch", "input_boolean"})),
-    "person": EntityRule(frozenset({"person"})),
-    "device_tracker": EntityRule(frozenset({"device_tracker"})),
-    "scene": EntityRule(frozenset({"scene"})),
-    "script": EntityRule(frozenset({"script"})),
-    "automation": EntityRule(frozenset({"automation"})),
-    "button": EntityRule(frozenset({"button", "input_button"})),
-    "action": EntityRule(
-        frozenset(
-            {
-                "scene",
-                "script",
-                "automation",
-                "button",
-                "input_button",
-                "input_boolean",
-                "number",
-                "input_number",
-                "select",
-                "input_select",
-            }
-        )
-    ),
+DEFAULT_CATALOG_LIMIT = TRANSPORTS["legacy_http"]["default_limit"]
+MAX_CATALOG_LIMIT = TRANSPORTS["legacy_http"]["max_limit"]
+ENTITY_RULES = {
+    name: EntityRule(
+        frozenset(domains) if domains else None, allow_any_domain=domains is None
+    )
+    for name, domains in FIELD_DOMAINS.items()
 }

@@ -1,6 +1,6 @@
 # Native ESPHome entity catalog
 
-The native catalog is the supported proof-of-concept transport between an
+The native catalog is the supported transport between an
 EspControl display and Home Assistant. The display sends the
 `espcontrol.search_entities` response action through its existing ESPHome API
 connection. No Home Assistant long-lived token, URL-fragment credential, or
@@ -13,6 +13,10 @@ action permission is disabled, or the connection drops, the display reports a
 recoverable catalog error and keeps manual entity-ID entry available.
 
 ## Contract
+
+The canonical versioned schema is [catalog-v1.json](../protocol/catalog-v1.json).
+See the [generated reference](catalog-contract.md) for all fields and transport limits.
+
 
 The action request is bounded and read-only:
 
@@ -42,7 +46,7 @@ limits request size, queue depth, response bytes, and timeout, and reports
 invalid pagination, unavailable HA, cross-origin access, queue saturation, and
 timeouts as distinct errors.
 
-## Validation baseline
+## Historical hardware validation baseline
 
 The hardware validation used the 7-inch P4 profile
 `guition-esp32-p4-jc1060p470`, ESPHome `2026.9.0`, the EspControl firmware
@@ -59,3 +63,7 @@ The legacy pairing HTTP endpoints remain available for older firmware during
 the proof-of-concept transition. New firmware uses the display-origin native
 endpoint. Once all deployed panels use the native protocol, the pairing store
 and legacy endpoint can be removed in a separate breaking-change release.
+
+For the current automated version matrix and remaining hardware checks, see
+[compatibility](compatibility.md). The historical baseline above is not evidence
+that the current revision has been flashed.

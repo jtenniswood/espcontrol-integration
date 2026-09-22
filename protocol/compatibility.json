@@ -1,0 +1,18 @@
+{
+  "contract_version": "1.0.0",
+  "home_assistant": [
+    {"label": "minimum", "version": "2026.8.0", "requirements": "requirements-test-min.txt"},
+    {"label": "current", "version": "2026.9.3", "requirements": "requirements-test.txt"}
+  ],
+  "firmware": [
+    {
+      "repository": "jtenniswood/espcontrol",
+      "revision": "c525e016ecaa5118d791fcc047bb43ffde32b1c6",
+      "status": "native catalog feature branch; not a released firmware claim",
+      "esphome": "2026.9.0",
+      "wire_version": 1,
+      "fixture": "protocol/fixtures/catalog-v1.json"
+    }
+  ],
+  "legacy_http": "retained; installed firmware inventory is not yet verified"
+}
