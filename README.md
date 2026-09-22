@@ -1,5 +1,7 @@
 # EspControl Integration
 
+<img src="https://raw.githubusercontent.com/jtenniswood/espcontrol-integration/main/brand/icon.png" alt="EspControl" width="128" height="128">
+
 A HACS custom integration that connects EspControl displays to Home Assistant.
 It discovers displays, opens their configurator through **Visit**, supplies safe
 entity-selection metadata over the existing ESPHome connection, and mirrors the
