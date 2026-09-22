@@ -74,6 +74,3 @@ attributes, camera URLs, and access tokens are never forwarded.
 Use Python 3.14 and install `requirements-test.txt` in a virtual environment, then
 run `python -m pytest tests/components/espcontrol`. Tests use Home Assistant's
 registries and entity platforms with device HTTP access mocked out.
-
-See the [updated expert review](docs/expert-review.md) for accepted architecture
-decisions, completed improvements, and remaining validation priorities.
