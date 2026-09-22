@@ -1,5 +1,7 @@
 # EspControl Integration
 
+<img src="https://raw.githubusercontent.com/jtenniswood/espcontrol-integration/main/brand/icon.png" alt="EspControl" width="128" height="128">
+
 This repository contains the experimental EspControl integration. It is a HACS-installable
 custom integration and is not a Home Assistant Core contribution.
 
