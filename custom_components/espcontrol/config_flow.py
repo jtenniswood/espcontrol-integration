@@ -41,6 +41,19 @@ class EspControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         self._data: dict[str, Any] = {}
 
+    @callback
+    def _entry_for_identity(self, device_id: str) -> config_entries.ConfigEntry | None:
+        """Include disabled legacy entries whose migration has not run yet."""
+        return next(
+            (
+                entry
+                for entry in self._async_current_entries()
+                if normalize_device_id(entry.unique_id or entry.data[CONF_DEVICE_ID])
+                == device_id
+            ),
+            None,
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(
@@ -72,6 +85,16 @@ class EspControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         except (ValueError, vol.Invalid):
             return self.async_abort(reason="invalid_device")
         await self.async_set_unique_id(device_id)
+        if existing := self._entry_for_identity(device_id):
+            self.hass.config_entries.async_update_entry(
+                existing,
+                data={
+                    **existing.data,
+                    CONF_HOST: discovery_info.host,
+                    CONF_WEB_PORT: web_port,
+                },
+            )
+            return self.async_abort(reason="already_configured")
         self._abort_if_unique_id_configured(
             updates={CONF_HOST: discovery_info.host, CONF_WEB_PORT: web_port}
         )
@@ -109,6 +132,8 @@ class EspControlConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_DEVICE_ID: normalize_device_id(user_input[CONF_DEVICE_ID]),
             }
             await self.async_set_unique_id(user_input[CONF_DEVICE_ID])
+            if self._entry_for_identity(user_input[CONF_DEVICE_ID]):
+                return self.async_abort(reason="already_configured")
             self._abort_if_unique_id_configured()
             return self.async_create_entry(
                 title=user_input[CONF_DEVICE_ID],

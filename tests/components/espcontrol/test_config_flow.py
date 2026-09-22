@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from ipaddress import IPv4Address
 
-from homeassistant.config_entries import SOURCE_ZEROCONF
+from homeassistant.config_entries import SOURCE_ZEROCONF, ConfigEntryDisabler
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.service_info.zeroconf import ZeroconfServiceInfo
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.espcontrol.const import DOMAIN
 
@@ -57,3 +58,22 @@ async def test_unsupported_protocol_is_ignored(hass) -> None:
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "unsupported_protocol"
+
+
+async def test_disabled_legacy_entry_is_not_rediscovered_as_a_duplicate(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        version=1,
+        minor_version=1,
+        unique_id="AA:BB:CC:DD:EE:FF",
+        disabled_by=ConfigEntryDisabler.USER,
+        data={"device_id": "AA:BB:CC:DD:EE:FF", "host": "192.0.2.11"},
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_ZEROCONF}, data=_discovery_info()
+    )
+    assert result["reason"] == "already_configured"
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+    assert entry.data["device_id"] == "AA:BB:CC:DD:EE:FF"
+    assert entry.data["host"] == "192.0.2.10"
