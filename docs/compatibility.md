@@ -53,3 +53,12 @@ or satisfy the removal gate. No firmware was flashed during this implementation.
 Use the release workflow to run both environments against the same tagged commit
 before publication. When raising the minimum or updating current HA, update the
 matrix, pinned requirements, HACS minimum, and tests together.
+
+Both requirements files explicitly pin Home Assistant as well as the test plugin.
+The plugin pins HA transitively: 0.13.354 requires HA 2026.8.0 and 0.13.366
+requires HA 2026.9.3. Plugin 0.13.368 instead requires HA 2026.10.0b0; updating
+that dependency alone does not preserve the declared current environment.
+Keep dependency-update PRs coordinated with this matrix. The explicit HA pins
+make incompatible plugin-only updates fail during dependency resolution rather
+than silently testing a different HA release. Keep the installed-version assertion
+in `scripts/check_compatibility.py`; do not relax it to accommodate dependency drift.

@@ -1,2 +1,3 @@
 # Home Assistant 2026.8.0 (minimum supported version)
+homeassistant==2026.8.0
 pytest-homeassistant-custom-component==0.13.354
