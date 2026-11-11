@@ -1,4 +1,4 @@
 # Keep this pair aligned with protocol/compatibility.json and the CI matrix.
 # New plugin releases can pin a different HA release, including prereleases.
-homeassistant==2026.9.3
+homeassistant==2026.11.1
 pytest-homeassistant-custom-component==0.13.366
